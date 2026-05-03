@@ -1,0 +1,583 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>POLITECH | Secure Login</title>
+  <meta name="description" content="POLITECH Command Operations Center — Secure officer login portal.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+  <style>
+    :root {
+      --navy:          #0f172a;
+      --navy-2:        #1e293b;
+      --navy-3:        #334155;
+      --electric:      #3b82f6;
+      --electric-glow: rgba(59,130,246,0.35);
+      --electric-light:rgba(59,130,246,0.12);
+      --emerald:       #10b981;
+      --crimson:       #ef4444;
+      --text:          #e2e8f0;
+      --text-muted:    #94a3b8;
+      --glass-bg:      rgba(30,41,59,0.65);
+      --glass-border:  rgba(255,255,255,0.08);
+      --shadow:        0 24px 64px rgba(0,0,0,0.6);
+      --radius:        16px;
+      --tr:            all 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    * { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',sans-serif; }
+
+    body {
+      background: var(--navy);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      overflow: hidden;
+      position: relative;
+    }
+
+    /* ── ANIMATED BACKGROUND ── */
+    .bg-canvas {
+      position: fixed;
+      inset: 0;
+      background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.12) 0%, transparent 60%),
+                  radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.1) 0%, transparent 50%),
+                  radial-gradient(ellipse at 60% 80%, rgba(16,185,129,0.07) 0%, transparent 45%),
+                  #0f172a;
+      z-index: 0;
+    }
+
+    .grid-overlay {
+      position: fixed;
+      inset: 0;
+      background-image:
+        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-size: 48px 48px;
+      z-index: 0;
+    }
+
+    /* Floating orbs */
+    .orb {
+      position: fixed;
+      border-radius: 50%;
+      filter: blur(70px);
+      animation: float 8s ease-in-out infinite;
+      z-index: 0;
+    }
+    .orb-1 { width:380px; height:380px; background:rgba(59,130,246,0.12); top:-80px; left:-80px; animation-delay:0s; }
+    .orb-2 { width:280px; height:280px; background:rgba(99,102,241,0.1); bottom:-60px; right:-60px; animation-delay:-3s; }
+    .orb-3 { width:200px; height:200px; background:rgba(16,185,129,0.08); top:50%; left:60%; animation-delay:-5s; }
+
+    @keyframes float {
+      0%,100% { transform: translate(0,0) scale(1); }
+      33%      { transform: translate(20px,-20px) scale(1.05); }
+      66%      { transform: translate(-15px,10px) scale(0.97); }
+    }
+
+    /* ── CARD ── */
+    .card-wrap {
+      position: relative;
+      z-index: 10;
+      width: 100%;
+      max-width: 440px;
+      padding: 20px;
+    }
+
+    .login-card {
+      background: var(--glass-bg);
+      border: 1px solid var(--glass-border);
+      border-radius: var(--radius);
+      padding: 44px 40px;
+      backdrop-filter: blur(24px);
+      box-shadow: var(--shadow);
+      animation: cardIn 0.6s cubic-bezier(0.4,0,0.2,1) both;
+    }
+
+    @keyframes cardIn {
+      from { opacity:0; transform:translateY(30px) scale(0.96); }
+      to   { opacity:1; transform:translateY(0) scale(1); }
+    }
+
+    /* ── LOGO ── */
+    .logo-section {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 12px;
+      margin-bottom: 36px;
+    }
+
+    .logo-icon {
+      width: 64px;
+      height: 64px;
+      background: linear-gradient(135deg, var(--electric), #6366f1);
+      border-radius: 18px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 1.8rem;
+      color: white;
+      box-shadow: 0 12px 32px var(--electric-glow);
+      animation: iconPulse 3s ease-in-out infinite;
+    }
+
+    @keyframes iconPulse {
+      0%,100% { box-shadow: 0 12px 32px var(--electric-glow); }
+      50%      { box-shadow: 0 12px 48px rgba(59,130,246,0.5); }
+    }
+
+    .logo-title {
+      font-size: 1.8rem;
+      font-weight: 900;
+      letter-spacing: 3px;
+      background: linear-gradient(135deg, #e2e8f0, var(--electric));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .logo-sub {
+      font-size: 0.78rem;
+      color: var(--text-muted);
+      font-weight: 500;
+      letter-spacing: 0.5px;
+      text-align: center;
+    }
+
+    /* ── FORM ── */
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.75rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.8px;
+      margin-bottom: 8px;
+    }
+
+    .input-wrap {
+      position: relative;
+    }
+
+    .input-wrap i {
+      position: absolute;
+      left: 14px;
+      top: 50%;
+      transform: translateY(-50%);
+      color: var(--text-muted);
+      font-size: 0.85rem;
+      pointer-events: none;
+      transition: var(--tr);
+    }
+
+    .fc {
+      width: 100%;
+      padding: 13px 14px 13px 42px;
+      border-radius: 11px;
+      border: 1px solid var(--glass-border);
+      background: rgba(255,255,255,0.04);
+      color: var(--text);
+      font-size: 0.92rem;
+      transition: var(--tr);
+    }
+
+    .fc:focus {
+      outline: none;
+      border-color: var(--electric);
+      box-shadow: 0 0 0 3px var(--electric-light);
+      background: rgba(59,130,246,0.05);
+    }
+
+    .fc:focus + .input-wrap i,
+    .input-wrap:has(.fc:focus) i { color: var(--electric); }
+
+    .show-pw {
+      position: absolute;
+      right: 12px;
+      top: 50%;
+      transform: translateY(-50%);
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      cursor: pointer;
+      font-size: 0.85rem;
+      padding: 4px;
+      transition: var(--tr);
+    }
+    .show-pw:hover { color: var(--electric); }
+
+    /* ── ROLE QUICK SELECT ── */
+    .quick-roles {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 8px;
+      margin-bottom: 22px;
+    }
+
+    .role-chip {
+      padding: 9px 10px;
+      border-radius: 9px;
+      border: 1px solid var(--glass-border);
+      background: transparent;
+      color: var(--text-muted);
+      font-size: 0.75rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: var(--tr);
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .role-chip:hover, .role-chip.active {
+      border-color: var(--electric);
+      color: var(--electric);
+      background: var(--electric-light);
+    }
+
+    .role-chip.active {
+      box-shadow: 0 0 12px var(--electric-light);
+    }
+
+    /* ── LOGIN BTN ── */
+    .btn-login {
+      width: 100%;
+      padding: 15px;
+      border-radius: 12px;
+      border: none;
+      background: linear-gradient(135deg, var(--electric), #6366f1);
+      color: #fff;
+      font-weight: 800;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: var(--tr);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      position: relative;
+      overflow: hidden;
+      margin-top: 4px;
+    }
+
+    .btn-login::before {
+      content: '';
+      position: absolute;
+      top: 0; left: -100%;
+      width: 100%; height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+      transition: left 0.5s;
+    }
+
+    .btn-login:hover::before { left: 100%; }
+
+    .btn-login:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 14px 36px var(--electric-glow);
+    }
+
+    .btn-login:active { transform: translateY(0); }
+
+    .btn-login.loading {
+      pointer-events: none;
+      opacity: 0.8;
+    }
+
+    .spinner {
+      width: 18px;
+      height: 18px;
+      border: 2px solid rgba(255,255,255,0.3);
+      border-top-color: white;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    /* ── ERROR ── */
+    .error-msg {
+      display: none;
+      background: rgba(239,68,68,0.12);
+      border: 1px solid rgba(239,68,68,0.3);
+      color: #f87171;
+      border-radius: 9px;
+      padding: 11px 14px;
+      font-size: 0.82rem;
+      font-weight: 600;
+      margin-bottom: 16px;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .error-msg.show { display: flex; animation: shake 0.4s ease; }
+
+    @keyframes shake {
+      0%,100% { transform: translateX(0); }
+      25%      { transform: translateX(-6px); }
+      75%      { transform: translateX(6px); }
+    }
+
+    /* ── DIVIDER ── */
+    .divider {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      margin: 20px 0;
+      color: var(--text-muted);
+      font-size: 0.72rem;
+      font-weight: 600;
+    }
+    .divider::before, .divider::after {
+      content: '';
+      flex: 1;
+      height: 1px;
+      background: var(--glass-border);
+    }
+
+    /* ── FOOTER ── */
+    .login-footer {
+      margin-top: 28px;
+      text-align: center;
+      font-size: 0.72rem;
+      color: var(--text-muted);
+      line-height: 1.8;
+    }
+
+    .login-footer .secure-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      color: var(--emerald);
+      font-weight: 700;
+    }
+
+    /* ── STATUS DOTS ── */
+    .status-bar {
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      margin-top: 20px;
+      font-size: 0.7rem;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+    }
+
+    .dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--emerald);
+      animation: blink 2s infinite;
+    }
+
+    @keyframes blink {
+      0%,100% { opacity:1; }
+      50%      { opacity:0.3; }
+    }
+
+    /* ── SCROLLBAR ── */
+    ::-webkit-scrollbar { width: 6px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: var(--navy-3); border-radius: 3px; }
+  </style>
+</head>
+
+<body>
+  <div class="bg-canvas"></div>
+  <div class="grid-overlay"></div>
+  <div class="orb orb-1"></div>
+  <div class="orb orb-2"></div>
+  <div class="orb orb-3"></div>
+
+  <div class="card-wrap">
+    <div class="login-card">
+
+      <!-- LOGO -->
+      <div class="logo-section">
+        <div class="logo-icon"><i class="fas fa-shield-halved"></i></div>
+        <div class="logo-title">POLITECH</div>
+        <div class="logo-sub">Command Operations Center &bull; Secure Access Portal</div>
+      </div>
+
+      <!-- QUICK ROLE CHIPS -->
+      <p style="font-size:0.72rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">Quick Login As</p>
+      <div class="quick-roles">
+        <button class="role-chip" id="chip-admin"      onclick="fillCredentials('admin','admin123')"><i class="fas fa-crown"></i> Admin</button>
+        <button class="role-chip" id="chip-dispatcher" onclick="fillCredentials('dispatcher','dispatch123')"><i class="fas fa-headset"></i> Dispatcher</button>
+        <button class="role-chip" id="chip-officer"    onclick="fillCredentials('officer','officer123')"><i class="fas fa-user-shield"></i> Officer</button>
+        <button class="role-chip" id="chip-analyst"    onclick="fillCredentials('analyst','analyst123')"><i class="fas fa-chart-bar"></i> Analyst</button>
+      </div>
+
+      <div class="divider">or enter credentials</div>
+
+      <!-- ERROR -->
+      <div class="error-msg" id="errorMsg">
+        <i class="fas fa-circle-xmark"></i>
+        <span id="errorText">Invalid username or password</span>
+      </div>
+
+      <!-- FORM -->
+      <form id="loginForm" autocomplete="on">
+        <div class="form-group">
+          <label for="username">Username</label>
+          <div class="input-wrap">
+            <i class="fas fa-user"></i>
+            <input type="text" id="username" class="fc" placeholder="Enter username" autocomplete="username" required>
+          </div>
+        </div>
+        <div class="form-group">
+          <label for="password">Password</label>
+          <div class="input-wrap">
+            <i class="fas fa-lock"></i>
+            <input type="password" id="password" class="fc" placeholder="Enter password" autocomplete="current-password" required>
+            <button type="button" class="show-pw" id="togglePw" title="Show/hide password">
+              <i class="fas fa-eye" id="eyeIcon"></i>
+            </button>
+          </div>
+        </div>
+        <button type="submit" class="btn-login" id="loginBtn">
+          <i class="fas fa-right-to-bracket"></i>
+          <span id="btnText">Access System</span>
+        </button>
+      </form>
+
+      <!-- FOOTER -->
+      <div class="login-footer">
+        <div class="status-bar">
+          <span class="status-dot"><span class="dot"></span> Backend Online</span>
+          <span>&bull;</span>
+          <span class="secure-badge"><i class="fas fa-shield-check"></i> JWT Secured</span>
+          <span>&bull;</span>
+          <span>SQLite DB</span>
+        </div>
+        <div style="margin-top:10px;">POLITECH v1.0 &bull; Tumakuru Police &bull; Internal Use Only</div>
+      </div>
+
+    </div>
+  </div>
+
+  <script>
+    const API = 'http://127.0.0.1:8000';
+
+    // ── Auto-redirect if already logged in ──
+    (function () {
+      const token = localStorage.getItem('pt_token');
+      if (token) {
+        // Verify token is still valid
+        fetch(`${API}/api/v1/stats`, {
+          headers: { 'Authorization': 'Bearer ' + token }
+        }).then(r => {
+          if (r.ok) window.location.replace('police.html');
+          else { localStorage.removeItem('pt_token'); localStorage.removeItem('pt_role'); }
+        }).catch(() => {});
+      }
+    })();
+
+    // ── Show/hide password ──
+    document.getElementById('togglePw').onclick = () => {
+      const pw = document.getElementById('password');
+      const eye = document.getElementById('eyeIcon');
+      if (pw.type === 'password') {
+        pw.type = 'text';
+        eye.className = 'fas fa-eye-slash';
+      } else {
+        pw.type = 'password';
+        eye.className = 'fas fa-eye';
+      }
+    };
+
+    // ── Quick fill credentials ──
+    function fillCredentials(user, pass) {
+      document.getElementById('username').value = user;
+      document.getElementById('password').value = pass;
+      // highlight chip
+      document.querySelectorAll('.role-chip').forEach(c => c.classList.remove('active'));
+      document.getElementById('chip-' + user)?.classList.add('active');
+      hideError();
+    }
+
+    function showError(msg) {
+      const el = document.getElementById('errorMsg');
+      document.getElementById('errorText').textContent = msg;
+      el.classList.add('show');
+    }
+    function hideError() {
+      document.getElementById('errorMsg').classList.remove('show');
+    }
+
+    // ── Login submit ──
+    document.getElementById('loginForm').onsubmit = async (e) => {
+      e.preventDefault();
+      hideError();
+
+      const username = document.getElementById('username').value.trim();
+      const password = document.getElementById('password').value;
+      const btn      = document.getElementById('loginBtn');
+      const btnText  = document.getElementById('btnText');
+
+      // Loading state
+      btn.classList.add('loading');
+      btn.innerHTML = '<div class="spinner"></div><span>Authenticating…</span>';
+
+      try {
+        const res = await fetch(`${API}/api/v1/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ username, password })
+        });
+
+        if (!res.ok) {
+          const data = await res.json().catch(() => ({}));
+          throw new Error(data.detail || 'Authentication failed');
+        }
+
+        const data = await res.json();
+
+        // Store token and role
+        localStorage.setItem('pt_token', data.access_token);
+        localStorage.setItem('pt_role', data.role);
+        localStorage.setItem('pt_user', username);
+
+        // Success animation
+        btn.innerHTML = '<i class="fas fa-check-circle"></i><span>Access Granted</span>';
+        btn.style.background = 'linear-gradient(135deg, #10b981, #059669)';
+
+        setTimeout(() => {
+          window.location.replace('police.html');
+        }, 700);
+
+      } catch (err) {
+        showError(err.message || 'Connection failed. Is the backend running?');
+        btn.classList.remove('loading');
+        btn.innerHTML = '<i class="fas fa-right-to-bracket"></i><span>Access System</span>';
+      }
+    };
+
+    // ── Remove active chip on manual input ──
+    ['username', 'password'].forEach(id => {
+      document.getElementById(id).addEventListener('input', () => {
+        document.querySelectorAll('.role-chip').forEach(c => c.classList.remove('active'));
+        hideError();
+      });
+    });
+  </script>
+</body>
+
+</html>
