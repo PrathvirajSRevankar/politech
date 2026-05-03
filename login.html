@@ -8,27 +8,34 @@
   <meta name="description" content="POLITECH Command Operations Center — Secure officer login portal.">
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800;900&display=swap"
+    rel="stylesheet">
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
   <style>
     :root {
-      --navy:          #0f172a;
-      --navy-2:        #1e293b;
-      --navy-3:        #334155;
-      --electric:      #3b82f6;
-      --electric-glow: rgba(59,130,246,0.35);
-      --electric-light:rgba(59,130,246,0.12);
-      --emerald:       #10b981;
-      --crimson:       #ef4444;
-      --text:          #e2e8f0;
-      --text-muted:    #94a3b8;
-      --glass-bg:      rgba(30,41,59,0.65);
-      --glass-border:  rgba(255,255,255,0.08);
-      --shadow:        0 24px 64px rgba(0,0,0,0.6);
-      --radius:        16px;
-      --tr:            all 0.3s cubic-bezier(0.4,0,0.2,1);
+      --navy: #0f172a;
+      --navy-2: #1e293b;
+      --navy-3: #334155;
+      --electric: #3b82f6;
+      --electric-glow: rgba(59, 130, 246, 0.35);
+      --electric-light: rgba(59, 130, 246, 0.12);
+      --emerald: #10b981;
+      --crimson: #ef4444;
+      --text: #e2e8f0;
+      --text-muted: #94a3b8;
+      --glass-bg: rgba(30, 41, 59, 0.65);
+      --glass-border: rgba(255, 255, 255, 0.08);
+      --shadow: 0 24px 64px rgba(0, 0, 0, 0.6);
+      --radius: 16px;
+      --tr: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
     }
-    * { margin:0; padding:0; box-sizing:border-box; font-family:'Inter',sans-serif; }
+
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+      font-family: 'Inter', sans-serif;
+    }
 
     body {
       background: var(--navy);
@@ -45,10 +52,10 @@
     .bg-canvas {
       position: fixed;
       inset: 0;
-      background: radial-gradient(ellipse at 20% 50%, rgba(59,130,246,0.12) 0%, transparent 60%),
-                  radial-gradient(ellipse at 80% 20%, rgba(99,102,241,0.1) 0%, transparent 50%),
-                  radial-gradient(ellipse at 60% 80%, rgba(16,185,129,0.07) 0%, transparent 45%),
-                  #0f172a;
+      background: radial-gradient(ellipse at 20% 50%, rgba(59, 130, 246, 0.12) 0%, transparent 60%),
+        radial-gradient(ellipse at 80% 20%, rgba(99, 102, 241, 0.1) 0%, transparent 50%),
+        radial-gradient(ellipse at 60% 80%, rgba(16, 185, 129, 0.07) 0%, transparent 45%),
+        #0f172a;
       z-index: 0;
     }
 
@@ -56,8 +63,8 @@
       position: fixed;
       inset: 0;
       background-image:
-        linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
-        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+        linear-gradient(rgba(59, 130, 246, 0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59, 130, 246, 0.04) 1px, transparent 1px);
       background-size: 48px 48px;
       z-index: 0;
     }
@@ -70,14 +77,48 @@
       animation: float 8s ease-in-out infinite;
       z-index: 0;
     }
-    .orb-1 { width:380px; height:380px; background:rgba(59,130,246,0.12); top:-80px; left:-80px; animation-delay:0s; }
-    .orb-2 { width:280px; height:280px; background:rgba(99,102,241,0.1); bottom:-60px; right:-60px; animation-delay:-3s; }
-    .orb-3 { width:200px; height:200px; background:rgba(16,185,129,0.08); top:50%; left:60%; animation-delay:-5s; }
+
+    .orb-1 {
+      width: 380px;
+      height: 380px;
+      background: rgba(59, 130, 246, 0.12);
+      top: -80px;
+      left: -80px;
+      animation-delay: 0s;
+    }
+
+    .orb-2 {
+      width: 280px;
+      height: 280px;
+      background: rgba(99, 102, 241, 0.1);
+      bottom: -60px;
+      right: -60px;
+      animation-delay: -3s;
+    }
+
+    .orb-3 {
+      width: 200px;
+      height: 200px;
+      background: rgba(16, 185, 129, 0.08);
+      top: 50%;
+      left: 60%;
+      animation-delay: -5s;
+    }
 
     @keyframes float {
-      0%,100% { transform: translate(0,0) scale(1); }
-      33%      { transform: translate(20px,-20px) scale(1.05); }
-      66%      { transform: translate(-15px,10px) scale(0.97); }
+
+      0%,
+      100% {
+        transform: translate(0, 0) scale(1);
+      }
+
+      33% {
+        transform: translate(20px, -20px) scale(1.05);
+      }
+
+      66% {
+        transform: translate(-15px, 10px) scale(0.97);
+      }
     }
 
     /* ── CARD ── */
@@ -96,12 +137,19 @@
       padding: 44px 40px;
       backdrop-filter: blur(24px);
       box-shadow: var(--shadow);
-      animation: cardIn 0.6s cubic-bezier(0.4,0,0.2,1) both;
+      animation: cardIn 0.6s cubic-bezier(0.4, 0, 0.2, 1) both;
     }
 
     @keyframes cardIn {
-      from { opacity:0; transform:translateY(30px) scale(0.96); }
-      to   { opacity:1; transform:translateY(0) scale(1); }
+      from {
+        opacity: 0;
+        transform: translateY(30px) scale(0.96);
+      }
+
+      to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+      }
     }
 
     /* ── LOGO ── */
@@ -128,8 +176,15 @@
     }
 
     @keyframes iconPulse {
-      0%,100% { box-shadow: 0 12px 32px var(--electric-glow); }
-      50%      { box-shadow: 0 12px 48px rgba(59,130,246,0.5); }
+
+      0%,
+      100% {
+        box-shadow: 0 12px 32px var(--electric-glow);
+      }
+
+      50% {
+        box-shadow: 0 12px 48px rgba(59, 130, 246, 0.5);
+      }
     }
 
     .logo-title {
@@ -185,7 +240,7 @@
       padding: 13px 14px 13px 42px;
       border-radius: 11px;
       border: 1px solid var(--glass-border);
-      background: rgba(255,255,255,0.04);
+      background: rgba(255, 255, 255, 0.04);
       color: var(--text);
       font-size: 0.92rem;
       transition: var(--tr);
@@ -195,15 +250,17 @@
       outline: none;
       border-color: var(--electric);
       box-shadow: 0 0 0 3px var(--electric-light);
-      background: rgba(59,130,246,0.05);
+      background: rgba(59, 130, 246, 0.05);
     }
 
-    .fc:focus + .input-wrap i,
-    .input-wrap:has(.fc:focus) i { color: var(--electric); }
+    .fc:focus+.input-wrap i,
+    .input-wrap:has(.fc:focus) i {
+      color: var(--electric);
+    }
 
     .show-pw {
       position: absolute;
-      right: 12px;
+      right: 30px;
       top: 50%;
       transform: translateY(-50%);
       background: none;
@@ -214,7 +271,10 @@
       padding: 4px;
       transition: var(--tr);
     }
-    .show-pw:hover { color: var(--electric); }
+
+    .show-pw:hover {
+      color: var(--electric);
+    }
 
     /* ── ROLE QUICK SELECT ── */
     .quick-roles {
@@ -241,7 +301,8 @@
       gap: 6px;
     }
 
-    .role-chip:hover, .role-chip.active {
+    .role-chip:hover,
+    .role-chip.active {
       border-color: var(--electric);
       color: var(--electric);
       background: var(--electric-light);
@@ -275,20 +336,26 @@
     .btn-login::before {
       content: '';
       position: absolute;
-      top: 0; left: -100%;
-      width: 100%; height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.12), transparent);
+      top: 0;
+      left: -100%;
+      width: 100%;
+      height: 100%;
+      background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.12), transparent);
       transition: left 0.5s;
     }
 
-    .btn-login:hover::before { left: 100%; }
+    .btn-login:hover::before {
+      left: 100%;
+    }
 
     .btn-login:hover {
       transform: translateY(-2px);
       box-shadow: 0 14px 36px var(--electric-glow);
     }
 
-    .btn-login:active { transform: translateY(0); }
+    .btn-login:active {
+      transform: translateY(0);
+    }
 
     .btn-login.loading {
       pointer-events: none;
@@ -298,18 +365,23 @@
     .spinner {
       width: 18px;
       height: 18px;
-      border: 2px solid rgba(255,255,255,0.3);
+      border: 2px solid rgba(255, 255, 255, 0.3);
       border-top-color: white;
       border-radius: 50%;
       animation: spin 0.7s linear infinite;
     }
-    @keyframes spin { to { transform: rotate(360deg); } }
+
+    @keyframes spin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
 
     /* ── ERROR ── */
     .error-msg {
       display: none;
-      background: rgba(239,68,68,0.12);
-      border: 1px solid rgba(239,68,68,0.3);
+      background: rgba(239, 68, 68, 0.12);
+      border: 1px solid rgba(239, 68, 68, 0.3);
       color: #f87171;
       border-radius: 9px;
       padding: 11px 14px;
@@ -320,12 +392,25 @@
       gap: 8px;
     }
 
-    .error-msg.show { display: flex; animation: shake 0.4s ease; }
+    .error-msg.show {
+      display: flex;
+      animation: shake 0.4s ease;
+    }
 
     @keyframes shake {
-      0%,100% { transform: translateX(0); }
-      25%      { transform: translateX(-6px); }
-      75%      { transform: translateX(6px); }
+
+      0%,
+      100% {
+        transform: translateX(0);
+      }
+
+      25% {
+        transform: translateX(-6px);
+      }
+
+      75% {
+        transform: translateX(6px);
+      }
     }
 
     /* ── DIVIDER ── */
@@ -338,7 +423,9 @@
       font-size: 0.72rem;
       font-weight: 600;
     }
-    .divider::before, .divider::after {
+
+    .divider::before,
+    .divider::after {
       content: '';
       flex: 1;
       height: 1px;
@@ -388,14 +475,30 @@
     }
 
     @keyframes blink {
-      0%,100% { opacity:1; }
-      50%      { opacity:0.3; }
+
+      0%,
+      100% {
+        opacity: 1;
+      }
+
+      50% {
+        opacity: 0.3;
+      }
     }
 
     /* ── SCROLLBAR ── */
-    ::-webkit-scrollbar { width: 6px; }
-    ::-webkit-scrollbar-track { background: transparent; }
-    ::-webkit-scrollbar-thumb { background: var(--navy-3); border-radius: 3px; }
+    ::-webkit-scrollbar {
+      width: 6px;
+    }
+
+    ::-webkit-scrollbar-track {
+      background: transparent;
+    }
+
+    ::-webkit-scrollbar-thumb {
+      background: var(--navy-3);
+      border-radius: 3px;
+    }
   </style>
 </head>
 
@@ -417,12 +520,18 @@
       </div>
 
       <!-- QUICK ROLE CHIPS -->
-      <p style="font-size:0.72rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">Quick Login As</p>
+      <p
+        style="font-size:0.72rem;color:var(--text-muted);font-weight:700;text-transform:uppercase;letter-spacing:0.8px;margin-bottom:10px;">
+        Quick Login As</p>
       <div class="quick-roles">
-        <button class="role-chip" id="chip-admin"      onclick="fillCredentials('admin','admin123')"><i class="fas fa-crown"></i> Admin</button>
-        <button class="role-chip" id="chip-dispatcher" onclick="fillCredentials('dispatcher','dispatch123')"><i class="fas fa-headset"></i> Dispatcher</button>
-        <button class="role-chip" id="chip-officer"    onclick="fillCredentials('officer','officer123')"><i class="fas fa-user-shield"></i> Officer</button>
-        <button class="role-chip" id="chip-analyst"    onclick="fillCredentials('analyst','analyst123')"><i class="fas fa-chart-bar"></i> Analyst</button>
+        <button class="role-chip" id="chip-admin" onclick="fillCredentials('admin','admin123')"><i
+            class="fas fa-crown"></i> Admin</button>
+        <button class="role-chip" id="chip-dispatcher" onclick="fillCredentials('dispatcher','dispatch123')"><i
+            class="fas fa-headset"></i> Dispatcher</button>
+        <button class="role-chip" id="chip-officer" onclick="fillCredentials('officer','officer123')"><i
+            class="fas fa-user-shield"></i> Officer</button>
+        <button class="role-chip" id="chip-analyst" onclick="fillCredentials('analyst','analyst123')"><i
+            class="fas fa-chart-bar"></i> Analyst</button>
       </div>
 
       <div class="divider">or enter credentials</div>
@@ -446,7 +555,8 @@
           <label for="password">Password</label>
           <div class="input-wrap">
             <i class="fas fa-lock"></i>
-            <input type="password" id="password" class="fc" placeholder="Enter password" autocomplete="current-password" required>
+            <input type="password" id="password" class="fc" placeholder="Enter password" autocomplete="current-password"
+              required>
             <button type="button" class="show-pw" id="togglePw" title="Show/hide password">
               <i class="fas fa-eye" id="eyeIcon"></i>
             </button>
@@ -486,7 +596,7 @@
         }).then(r => {
           if (r.ok) window.location.replace('police.html');
           else { localStorage.removeItem('pt_token'); localStorage.removeItem('pt_role'); }
-        }).catch(() => {});
+        }).catch(() => { });
       }
     })();
 
@@ -529,8 +639,8 @@
 
       const username = document.getElementById('username').value.trim();
       const password = document.getElementById('password').value;
-      const btn      = document.getElementById('loginBtn');
-      const btnText  = document.getElementById('btnText');
+      const btn = document.getElementById('loginBtn');
+      const btnText = document.getElementById('btnText');
 
       // Loading state
       btn.classList.add('loading');
