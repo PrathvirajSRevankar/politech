@@ -2,7 +2,7 @@
 // POLITECH — analytics.js  (API-connected analytics logic)
 // ══════════════════════════════════════════════════════
 
-const API = 'http://127.0.0.1:8000';
+const API = 'https://politech-backend.onrender.com';
 
 const token = localStorage.getItem('pt_token');
 if (!token) { window.location.replace('login.html'); }
