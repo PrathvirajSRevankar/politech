@@ -2,8 +2,8 @@
 // POLITECH — app.js  (API-connected frontend logic)
 // ══════════════════════════════════════════════════════
 
-const API  = 'https://politech-backend.onrender.com';
-const WS_URL = 'wss://politech-backend.onrender.com/ws';
+const API  = 'https://politech.onrender.com';
+const WS_URL = 'wss://politech.onrender.com/ws';
 
 // ── Auth helpers ──────────────────────────────────────
 function getToken() { return localStorage.getItem('pt_token') || ''; }
