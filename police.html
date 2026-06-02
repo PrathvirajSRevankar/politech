@@ -1961,17 +1961,18 @@
     <span class="fab-badge"></span>
   </button>
   <div id="novaPanel">
-    <div class="nova-header">
+    <div class="nova-header" style="position:relative;">
       <div class="nova-header-icon"><i class="fas fa-robot"></i></div>
       <div class="nova-header-info">
         <h4>NOVA Command Assistant</h4>
         <span>● Online — Tumkur Region</span>
       </div>
+      <button onclick="novaOpenSettings()" title="Gemini AI Settings" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.95rem;padding:4px 6px;border-radius:6px;transition:color 0.2s;" onmouseover="this.style.color='#6366f1'" onmouseout="this.style.color='var(--text-muted)'"><i class="fas fa-gear"></i></button>
     </div>
     <div id="novaMessages"></div>
     <div id="novaTyping"><div class="typing-dots"><span></span><span></span><span></span></div> NOVA is thinking…</div>
     <div class="nova-input-bar">
-      <input type="text" id="novaInput" placeholder="Ask NOVA a command…" autocomplete="off">
+      <input type="text" id="novaInput" placeholder="Ask anything… (type 'help' for commands)" autocomplete="off">
       <button class="nova-send" onclick="sendNovaMessage()"><i class="fas fa-paper-plane"></i></button>
     </div>
   </div>
