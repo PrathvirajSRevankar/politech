@@ -6,5 +6,6 @@ python-jose[cryptography]
 bcrypt
 python-dotenv
 websockets
+httpx
 python-multipart
 pydantic

@@ -13,8 +13,6 @@ let novaProcessing = false;
 function novaToken() { return localStorage.getItem('pt_token') || ''; }
 function novaRole()  { return localStorage.getItem('pt_role')  || ''; }
 function novaUser()  { return localStorage.getItem('pt_user')  || ''; }
-function getGeminiKey() { return localStorage.getItem('nova_gemini_key') || ''; }
-function setGeminiKey(k) { localStorage.setItem('nova_gemini_key', k.trim()); }
 
 // ── POLITECH API ──────────────────────────────────────
 async function novaFetch(path, opts = {}) {
@@ -45,30 +43,43 @@ function dot(s) { const c={available:'#10b981',assigned:'#3b82f6','off-duty':'#6
 function badge(p) { const c={Critical:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#10b981'}; return `<span style="color:${c[p]||'#94a3b8'};font-weight:700">${p||'—'}</span>`; }
 function extractId(msg) { const m=msg.match(/\b(\d+)\b/); return m?parseInt(m[1]):null; }
 
-// ── Gemini API call ───────────────────────────────────
-async function callGemini(systemPrompt, userMsg) {
-  const key = getGeminiKey();
-  if (!key) return null;
+// ── Backend Gemini proxy ─────────────────────────────
+let novaChatHistory = [];
+
+async function novaGemini(userMsg) {
   try {
-    const res = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: { parts: [{ text: systemPrompt }] },
-          contents: [{ role: 'user', parts: [{ text: userMsg }] }],
-          generationConfig: { temperature: 0.4, maxOutputTokens: 512 }
-        })
-      }
-    );
+    const res = await fetch(NOVA_API + '/api/v1/nova/chat', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: userMsg, history: novaChatHistory.slice(-6) })
+    });
+    if (res.status === 429) return '⏳ Gemini is rate-limited. Please wait a moment and try again.';
     if (!res.ok) return null;
     const data = await res.json();
-    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+    // Update history for context
+    novaChatHistory.push({ role: 'user', text: userMsg });
+    novaChatHistory.push({ role: 'model', text: data.reply });
+    if (novaChatHistory.length > 20) novaChatHistory = novaChatHistory.slice(-20);
+    return data.reply;
   } catch { return null; }
 }
 
-// ── Gemini intent classifier ──────────────────────────
+// Keep geminiFormat for enriching structured responses
+async function geminiFormat(userMsg, dataLabel, dataJson) {
+  try {
+    const prompt = `The dispatcher asked: "${userMsg}". Live data (${dataLabel}): ${JSON.stringify(dataJson).slice(0,1500)}. Write a concise 2-3 sentence operational summary using specific numbers/names from the data. Professional tone.`;
+    const res = await fetch(NOVA_API + '/api/v1/nova/chat', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message: prompt, history: [] })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.reply;
+  } catch { return null; }
+}
+
+// ── Gemini intent classifier (via backend) ───────────
 const INTENT_SYSTEM = `You are a police dispatch AI assistant intent classifier. 
 Given a user message, respond ONLY with a JSON object (no markdown) with:
 - "intent": one of: situation, available_officers, offduty_officers, all_officers, unassigned_incidents, critical_incidents, all_incidents, assign, resolve, complete_duty, active_duties, all_duties, kpi, performance, priority_dist, alerts, help, confirm, cancel, unknown
@@ -81,14 +92,14 @@ Examples:
 "yes go ahead" -> {"intent":"confirm","id":null}`;
 
 async function classifyIntent(msg) {
-  const geminiResult = await callGemini(INTENT_SYSTEM, msg);
-  if (geminiResult) {
-    try {
-      const parsed = JSON.parse(geminiResult.replace(/```json|```/g, '').trim());
+  try {
+    const geminiResult = await novaGemini(INTENT_SYSTEM + '\n\nClassify this message (JSON only): ' + msg);
+    if (geminiResult) {
+      const cleaned = geminiResult.replace(/```json|```/g, '').trim();
+      const parsed = JSON.parse(cleaned);
       if (parsed.intent) return parsed;
-    } catch {}
-  }
-  // Fallback regex
+    }
+  } catch {}
   return fallbackClassify(msg);
 }
 
@@ -281,15 +292,8 @@ async function novaRespond(userMsg) {
         return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"${getGeminiKey() ? '<br><br>✨ <strong>Gemini AI active</strong> — ask anything in natural language!' : '<br><br>💡 Add Gemini API key via ⚙️ for natural language mode.'}`;
       default:
         if(window._novaPending) return `Waiting for confirmation. Reply <strong>yes</strong> or <strong>no</strong>.`;
-        // Always try Gemini for free-form conversation when key is set
-        if(getGeminiKey()) {
-          const freeReply = await callGemini(
-            `You are NOVA, an AI police command assistant embedded in POLITECH, a real-time operations dashboard for Tumkur Region, Karnataka. Be friendly, professional and concise. For greetings, greet back briefly and mention you can help with live police operations data. For operational questions you can't answer directly, suggest the right command. Keep responses under 4 sentences.`,
-            userMsg
-          );
-          return freeReply || `I'm having trouble connecting to Gemini right now. Try: <strong>"Who's available?"</strong> or type <strong>"help"</strong>.`;
-        }
-        return `I didn't understand that. Type <strong>"help"</strong> for available commands.`;
+        const freeReply = await novaGemini(userMsg);
+        return freeReply || `I didn't understand that. Type <strong>"help"</strong> for available commands.`;
     }
   } catch(e) {
     return `⚠️ <strong>Error:</strong> ${e.message}`;
@@ -298,29 +302,7 @@ async function novaRespond(userMsg) {
 
 // ── Settings UI ───────────────────────────────────────
 function novaOpenSettings() {
-  const key = getGeminiKey();
-  const panel = document.getElementById('novaSettingsPanel');
-  if(panel) { panel.style.display = panel.style.display==='none'?'block':'none'; return; }
-  const s = document.createElement('div');
-  s.id = 'novaSettingsPanel';
-  s.style.cssText = 'position:absolute;top:56px;right:0;left:0;background:var(--navy-2);border-bottom:1px solid var(--glass-border);padding:12px 16px;z-index:10;';
-  s.innerHTML = `
-    <div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">✨ Gemini AI API Key</div>
-    <div style="display:flex;gap:8px;">
-      <input id="novaKeyInput" type="password" placeholder="AIza..." value="${key}"
-        style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border);background:rgba(255,255,255,0.05);color:var(--text);font-size:0.82rem;outline:none;">
-      <button onclick="novaSaveKey()" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;font-size:0.8rem;cursor:pointer;font-weight:700;">Save</button>
-    </div>
-    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;">${key ? '✅ Key saved — Gemini AI active' : 'Get key from aistudio.google.com'}</div>`;
-  document.getElementById('novaPanel').appendChild(s);
-}
-
-function novaSaveKey() {
-  const val = document.getElementById('novaKeyInput').value.trim();
-  setGeminiKey(val);
-  const panel = document.getElementById('novaSettingsPanel');
-  if(panel) panel.remove();
-  addNovaMessage('nova', val ? '✅ <strong>Gemini AI activated!</strong> You can now ask me anything in natural language.' : 'API key removed. Falling back to command mode.');
+  addNovaMessage('nova', '✨ <strong>Gemini AI is handled server-side</strong> — no API key needed. You are already connected!');
 }
 
 // ── UI ────────────────────────────────────────────────
@@ -329,8 +311,7 @@ function toggleNova() {
   document.getElementById('novaPanel').classList.toggle('open', novaOpen);
   document.getElementById('novaFab').classList.toggle('active', novaOpen);
   if(novaOpen && novaMessages.length===0) {
-    const hasKey = getGeminiKey();
-    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}).<br>${hasKey ? '✨ <strong>Gemini AI active</strong> — ask me anything naturally!' : 'Type <strong>"help"</strong> for commands. Add Gemini key via <strong>⚙️</strong> for AI mode.'}`);
+    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}). ✨ <strong>Gemini AI active</strong> — ask me anything in natural language!<br>Type <strong>"help"</strong> to see operational commands.`);
   }
 }
 

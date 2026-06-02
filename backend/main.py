@@ -18,7 +18,7 @@ import models.duty      # noqa: F401
 import models.alert     # noqa: F401
 
 # Import routers
-from routers import ws, officers, incidents, duties, alerts, stats, analytics
+from routers import ws, officers, incidents, duties, alerts, stats, analytics, nova
 from auth import USERS_DB, LoginRequest, TokenResponse, create_access_token, verify_password
 from fastapi import HTTPException, status
 
@@ -75,4 +75,5 @@ app.include_router(duties.router)
 app.include_router(alerts.router)
 app.include_router(stats.router)
 app.include_router(analytics.router)
+app.include_router(nova.router)     # NOVA AI chat proxy
 app.include_router(ws.router)   # WebSocket at /ws (no api/v1 prefix)
