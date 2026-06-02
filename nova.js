@@ -56,9 +56,9 @@ async function callGemini(systemPrompt, userMsg) {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          system_instruction: { parts: [{ text: systemPrompt }] },
+          systemInstruction: { parts: [{ text: systemPrompt }] },
           contents: [{ role: 'user', parts: [{ text: userMsg }] }],
-          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+          generationConfig: { temperature: 0.4, maxOutputTokens: 512 }
         })
       }
     );
@@ -281,9 +281,13 @@ async function novaRespond(userMsg) {
         return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"${getGeminiKey() ? '<br><br>✨ <strong>Gemini AI active</strong> — ask anything in natural language!' : '<br><br>💡 Add Gemini API key via ⚙️ for natural language mode.'}`;
       default:
         if(window._novaPending) return `Waiting for confirmation. Reply <strong>yes</strong> or <strong>no</strong>.`;
+        // Always try Gemini for free-form conversation when key is set
         if(getGeminiKey()) {
-          const freeReply = await callGemini(`You are NOVA, a police dispatch AI for POLITECH (Tumkur Region). Answer concisely. If asked about live data, say you need a specific command like "show incidents" or "who's available". Keep replies under 3 sentences.`, userMsg);
-          if(freeReply) return freeReply;
+          const freeReply = await callGemini(
+            `You are NOVA, an AI police command assistant embedded in POLITECH, a real-time operations dashboard for Tumkur Region, Karnataka. Be friendly, professional and concise. For greetings, greet back briefly and mention you can help with live police operations data. For operational questions you can't answer directly, suggest the right command. Keep responses under 4 sentences.`,
+            userMsg
+          );
+          return freeReply || `I'm having trouble connecting to Gemini right now. Try: <strong>"Who's available?"</strong> or type <strong>"help"</strong>.`;
         }
         return `I didn't understand that. Type <strong>"help"</strong> for available commands.`;
     }
