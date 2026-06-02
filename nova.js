@@ -1,449 +1,366 @@
 // ══════════════════════════════════════════════════════
-// NOVA — Network Operations Virtual Assistant v2
-// Agentic AI Command Assistant for POLITECH
+// NOVA v3 — Gemini-powered AI Command Assistant
 // ══════════════════════════════════════════════════════
 
 const NOVA_API = 'https://politech.onrender.com';
+const GEMINI_MODEL = 'gemini-2.0-flash';
 
-// ── State ─────────────────────────────────────────────
 let novaOpen = false;
 let novaMessages = [];
 let novaProcessing = false;
 
-// ── Auth helpers ──────────────────────────────────────
+// ── Auth ──────────────────────────────────────────────
 function novaToken() { return localStorage.getItem('pt_token') || ''; }
 function novaRole()  { return localStorage.getItem('pt_role')  || ''; }
 function novaUser()  { return localStorage.getItem('pt_user')  || ''; }
-function novaHeaders() {
-  return { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' };
-}
+function getGeminiKey() { return localStorage.getItem('nova_gemini_key') || ''; }
+function setGeminiKey(k) { localStorage.setItem('nova_gemini_key', k.trim()); }
 
-// ── API fetch wrapper ─────────────────────────────────
+// ── POLITECH API ──────────────────────────────────────
 async function novaFetch(path, opts = {}) {
-  const res = await fetch(NOVA_API + path, { ...opts, headers: { ...novaHeaders(), ...(opts.headers || {}) } });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.detail || `${res.status} ${res.statusText}`);
-  }
+  const res = await fetch(NOVA_API + path, {
+    ...opts,
+    headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json', ...(opts.headers || {}) }
+  });
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.detail || res.statusText); }
   if (res.status === 204) return null;
   return res.json();
 }
 
-// ── Haversine distance (km) ───────────────────────────
+// ── Haversine ─────────────────────────────────────────
 function haversine(lat1, lon1, lat2, lon2) {
-  const R = 6371;
-  const dLat = (lat2 - lat1) * Math.PI / 180;
-  const dLon = (lon2 - lon1) * Math.PI / 180;
-  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180) * Math.cos(lat2*Math.PI/180) * Math.sin(dLon/2)**2;
+  const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
+  const a = Math.sin(dLat/2)**2 + Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
   return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
 }
 
 // ── Format helpers ────────────────────────────────────
 function fmtTable(headers, rows) {
   if (!rows.length) return '<em>No records found.</em>';
-  let html = '<table class="nova-table"><thead><tr>';
-  headers.forEach(h => html += `<th>${h}</th>`);
-  html += '</tr></thead><tbody>';
-  rows.forEach(r => {
-    html += '<tr>';
-    r.forEach(c => html += `<td>${c ?? '—'}</td>`);
-    html += '</tr>';
-  });
-  html += '</tbody></table>';
-  return html;
+  let h = '<table class="nova-table"><thead><tr>' + headers.map(x=>`<th>${x}</th>`).join('') + '</tr></thead><tbody>';
+  rows.forEach(r => { h += '<tr>' + r.map(c=>`<td>${c??'—'}</td>`).join('') + '</tr>'; });
+  return h + '</tbody></table>';
+}
+function dot(s) { const c={available:'#10b981',assigned:'#3b82f6','off-duty':'#64748b'}; return `<span style="color:${c[s]||'#94a3b8'}">● ${s}</span>`; }
+function badge(p) { const c={Critical:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#10b981'}; return `<span style="color:${c[p]||'#94a3b8'};font-weight:700">${p||'—'}</span>`; }
+function extractId(msg) { const m=msg.match(/\b(\d+)\b/); return m?parseInt(m[1]):null; }
+
+// ── Gemini API call ───────────────────────────────────
+async function callGemini(systemPrompt, userMsg) {
+  const key = getGeminiKey();
+  if (!key) return null;
+  try {
+    const res = await fetch(
+      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent?key=${key}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: { parts: [{ text: systemPrompt }] },
+          contents: [{ role: 'user', parts: [{ text: userMsg }] }],
+          generationConfig: { temperature: 0.2, maxOutputTokens: 1024 }
+        })
+      }
+    );
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data?.candidates?.[0]?.content?.parts?.[0]?.text || null;
+  } catch { return null; }
 }
 
-function statusDot(s) {
-  const colors = { available: '#10b981', assigned: '#3b82f6', 'off-duty': '#64748b', offduty: '#64748b' };
-  return `<span style="color:${colors[s]||'#94a3b8'}">● ${s}</span>`;
+// ── Gemini intent classifier ──────────────────────────
+const INTENT_SYSTEM = `You are a police dispatch AI assistant intent classifier. 
+Given a user message, respond ONLY with a JSON object (no markdown) with:
+- "intent": one of: situation, available_officers, offduty_officers, all_officers, unassigned_incidents, critical_incidents, all_incidents, assign, resolve, complete_duty, active_duties, all_duties, kpi, performance, priority_dist, alerts, help, confirm, cancel, unknown
+- "id": extracted number if present (incident/duty ID), or null
+
+Examples:
+"who is free right now" -> {"intent":"available_officers","id":null}
+"send someone to incident 5" -> {"intent":"assign","id":5}
+"what is happening" -> {"intent":"situation","id":null}
+"yes go ahead" -> {"intent":"confirm","id":null}`;
+
+async function classifyIntent(msg) {
+  const geminiResult = await callGemini(INTENT_SYSTEM, msg);
+  if (geminiResult) {
+    try {
+      const parsed = JSON.parse(geminiResult.replace(/```json|```/g, '').trim());
+      if (parsed.intent) return parsed;
+    } catch {}
+  }
+  // Fallback regex
+  return fallbackClassify(msg);
 }
 
-function priorityBadge(p) {
-  const colors = { Critical:'#ef4444', High:'#f59e0b', Medium:'#3b82f6', Low:'#10b981' };
-  return `<span style="color:${colors[p]||'#94a3b8'};font-weight:700">${p||'—'}</span>`;
-}
-
-// ── Extract first number from message ─────────────────
-function extractId(msg) {
-  const match = msg.match(/\b(\d+)\b/);
-  return match ? parseInt(match[1]) : null;
-}
-
-// ── Intent Parser — flexible NL matching ─────────────
-function parseIntent(msg) {
+function fallbackClassify(msg) {
   const m = msg.toLowerCase().trim();
-
-  // Confirmation / cancellation (check first)
-  if (/^(yes|y|confirm|go ahead|proceed|execute|do it|affirmative|sure|ok|okay|yep|yup)$/i.test(m)) return 'confirm';
-  if (/^(no|n|cancel|abort|stop|negative|nope|nah)$/i.test(m)) return 'cancel';
-
-  // Situation / overview
-  if (/situation|status|overview|happening|sitrep|briefing|summary|update|snapshot|report/i.test(m)) return 'situation';
-
-  // Assign
-  if (/assign|deploy|send|dispatch|nearest.*officer|officer.*nearest/i.test(m)) return 'assign';
-
-  // Resolve incident
-  if (/resolv|close.*incident|incident.*close|mark.*resolve|finish.*incident/i.test(m)) return 'resolve';
-
-  // Complete duty
-  if (/complet.*duty|duty.*complet|finish.*duty|duty.*finish|mark.*duty|done.*duty|duty.*done/i.test(m)) return 'complete_duty';
-
-  // Officers — specific filters first
-  if (/avail/i.test(m) && /officer|who|personnel|force/i.test(m)) return 'available_officers';
-  if (/avail/i.test(m)) return 'available_officers';
-  if (/off.?dut|who.?s off|not on dut/i.test(m)) return 'offduty_officers';
-  if (/officer|personnel|force|roster|headcount|staff/i.test(m)) return 'all_officers';
-
-  // Incidents — specific filters first
-  if (/unassign|pending|open|no.*officer|not assign/i.test(m) && /incident|call|case/i.test(m)) return 'unassigned_incidents';
-  if (/unassign|pending|open incident/i.test(m)) return 'unassigned_incidents';
-  if (/critical|urgent|emergency|high.?prior/i.test(m) && /incident|call|case/i.test(m)) return 'critical_incidents';
-  if (/incident|call|case|crime/i.test(m)) return 'all_incidents';
-
-  // Duties
-  if (/active dut|current dut|ongoing dut/i.test(m)) return 'active_duties';
-  if (/dut/i.test(m)) return 'all_duties';
-
-  // Analytics
-  if (/top officer|best officer|leaderboard|rank|who.*perform|perform/i.test(m)) return 'performance';
-  if (/kpi|metric|stat|number|today.*num|how many/i.test(m)) return 'kpi';
-  if (/priority|distribution|threat|severity|breakdown/i.test(m)) return 'priority_dist';
-
-  // Alerts
-  if (/alert|notification|warning|alarm/i.test(m)) return 'alerts';
-
-  // Help
-  if (/help|what can|command|how to|what do|guide|usage/i.test(m)) return 'help';
-
-  return 'unknown';
+  const id = extractId(msg);
+  if (/^(yes|y|confirm|go|proceed|sure|ok|yep)$/i.test(m)) return {intent:'confirm',id:null};
+  if (/^(no|n|cancel|abort|stop|nope)$/i.test(m)) return {intent:'cancel',id:null};
+  if (/situation|status|overview|sitrep|briefing|what.*happen|summary/i.test(m)) return {intent:'situation',id:null};
+  if (/assign|deploy|send|dispatch|nearest/i.test(m)) return {intent:'assign',id};
+  if (/resolv|close.*incident/i.test(m)) return {intent:'resolve',id};
+  if (/complet.*duty|finish.*duty|done.*duty/i.test(m)) return {intent:'complete_duty',id};
+  if (/avail/i.test(m)) return {intent:'available_officers',id:null};
+  if (/off.?dut/i.test(m)) return {intent:'offduty_officers',id:null};
+  if (/officer|force|roster|personnel/i.test(m)) return {intent:'all_officers',id:null};
+  if (/unassign|pending|open.*incident/i.test(m)) return {intent:'unassigned_incidents',id:null};
+  if (/critical|urgent/i.test(m)) return {intent:'critical_incidents',id:null};
+  if (/incident|call|crime|case/i.test(m)) return {intent:'all_incidents',id:null};
+  if (/active dut/i.test(m)) return {intent:'active_duties',id:null};
+  if (/dut/i.test(m)) return {intent:'all_duties',id:null};
+  if (/kpi|metric|stat/i.test(m)) return {intent:'kpi',id:null};
+  if (/perform|leaderboard|top officer/i.test(m)) return {intent:'performance',id:null};
+  if (/priority|distribution|severity/i.test(m)) return {intent:'priority_dist',id:null};
+  if (/alert|warning/i.test(m)) return {intent:'alerts',id:null};
+  if (/help|command/i.test(m)) return {intent:'help',id:null};
+  return {intent:'unknown',id:null};
 }
 
-// ── Main response engine ──────────────────────────────
+// ── Gemini response formatter ─────────────────────────
+async function geminiFormat(userMsg, dataLabel, dataJson) {
+  if (!getGeminiKey()) return null;
+  const prompt = `You are NOVA, an AI police command assistant for the Tumkur Region, Karnataka.
+The dispatcher asked: "${userMsg}"
+Here is the live data retrieved: ${dataLabel}
+Data: ${JSON.stringify(dataJson).slice(0, 2000)}
+
+Write a concise, professional operational response (2-5 sentences). Use specific numbers and names from the data. 
+Do NOT use markdown headers. Keep it brief and actionable.`;
+  return await callGemini('You are NOVA, a concise police dispatch AI assistant.', prompt);
+}
+
+// ── Execute tool & build reply ────────────────────────
 async function novaRespond(userMsg) {
-  const intent = parseIntent(userMsg);
-  let reply = '';
+  const { intent, id } = await classifyIntent(userMsg);
+
+  // Pending confirmation
+  if (intent === 'confirm' && window._novaPending) {
+    const p = window._novaPending; window._novaPending = null;
+    try {
+      if (p.action === 'assign') {
+        await novaFetch(`/api/v1/incidents/${p.incidentId}/assign`, { method:'PATCH', body: JSON.stringify({officerId: p.officerId}) });
+        if (typeof refreshAll === 'function') refreshAll();
+        return `✅ <strong>${p.officerName}</strong> assigned to incident #${p.incidentId}. Duty created, dashboard updated.`;
+      }
+      if (p.action === 'resolve') {
+        await novaFetch(`/api/v1/incidents/${p.incidentId}/resolve`, { method:'PATCH' });
+        if (typeof refreshAll === 'function') refreshAll();
+        return `✅ Incident #${p.incidentId} resolved and closed.`;
+      }
+      if (p.action === 'complete_duty') {
+        await novaFetch(`/api/v1/duties/${p.dutyId}/complete`, { method:'PATCH' });
+        if (typeof refreshAll === 'function') refreshAll();
+        return `✅ Duty #${p.dutyId} completed. Officer now available.`;
+      }
+    } catch(e) { return `❌ Action failed: ${e.message}`; }
+  }
+  if (intent === 'cancel') { window._novaPending = null; return 'Action cancelled.'; }
 
   try {
-    // ── Handle pending confirmation first ─────────────
-    if (intent === 'confirm' && window._novaPending) {
-      const p = window._novaPending;
-      window._novaPending = null;
-
-      if (p.action === 'assign') {
-        const result = await novaFetch(`/api/v1/incidents/${p.incidentId}/assign`, {
-          method: 'PATCH',
-          body: JSON.stringify({ officerId: p.officerId }),
-        });
-        if (result) {
-          reply = `✅ <strong>${p.officerName}</strong> has been assigned to incident #${p.incidentId}.<br>Emergency duty auto-created. Dashboard updated.`;
-          if (typeof refreshAll === 'function') refreshAll();
-        }
-      } else if (p.action === 'resolve') {
-        await novaFetch(`/api/v1/incidents/${p.incidentId}/resolve`, { method: 'PATCH' });
-        reply = `✅ Incident #${p.incidentId} has been resolved and closed.`;
-        if (typeof refreshAll === 'function') refreshAll();
-      } else if (p.action === 'complete_duty') {
-        await novaFetch(`/api/v1/duties/${p.dutyId}/complete`, { method: 'PATCH' });
-        reply = `✅ Duty #${p.dutyId} marked complete. Officer is now available.`;
-        if (typeof refreshAll === 'function') refreshAll();
-      }
-      return reply || '✅ Action completed.';
-    }
-
-    if (intent === 'cancel') {
-      window._novaPending = null;
-      return 'Action cancelled.';
-    }
-
-    // ── Intents ───────────────────────────────────────
-    switch (intent) {
-
+    switch(intent) {
       case 'situation': {
-        const [off, inc, kpi] = await Promise.all([
-          novaFetch('/api/v1/officers'),
-          novaFetch('/api/v1/incidents'),
-          novaFetch('/api/v1/analytics/kpi'),
-        ]);
-        const avail = off.filter(o => o.status === 'available').length;
-        const assigned = off.filter(o => o.status === 'assigned').length;
-        const offduty = off.filter(o => o.status === 'off-duty' || o.status === 'offduty').length;
-        const activeInc = inc.filter(i => !i.resolvedAt);
-        const unassigned = activeInc.filter(i => !i.assignedTo);
-        const criticals = unassigned.filter(i => i.priority === 'Critical');
-
-        reply = `<strong>📡 OPERATIONAL SNAPSHOT</strong><br><br>`;
-        reply += `<strong>Force:</strong> ${avail} available · ${assigned} deployed · ${offduty} off-duty<br>`;
-        reply += `<strong>Incidents:</strong> ${activeInc.length} active · ${unassigned.length} unassigned<br>`;
-        if (kpi) {
-          reply += `<strong>KPIs:</strong> ${kpi.totalIncidentsMTD} incidents MTD · Avg response ${kpi.avgResponseTimeMin} min · ${kpi.dutyCompletionRate}% duty completion<br>`;
-        }
-        if (criticals.length > 0) {
-          reply += `<br>⚠️ <strong>CRITICAL ALERT:</strong> ${criticals.length} unassigned critical incident(s)!`;
-          criticals.slice(0, 3).forEach(c => { reply += `<br>→ ${c.type} at ${c.location} (ID: ${c.id})`; });
-        }
-        if (avail < 2) reply += `<br>🔴 <strong>LOW STAFFING:</strong> Only ${avail} officer(s) available.`;
-        break;
+        const [off, inc, kpi] = await Promise.all([novaFetch('/api/v1/officers'), novaFetch('/api/v1/incidents'), novaFetch('/api/v1/analytics/kpi')]);
+        const avail = off.filter(o=>o.status==='available').length;
+        const active = inc.filter(i=>!i.resolvedAt);
+        const unassigned = active.filter(i=>!i.assignedTo);
+        const critUnassigned = unassigned.filter(i=>i.priority==='Critical');
+        const geminiReply = await geminiFormat(userMsg, 'Operational snapshot', {officers:{total:off.length,available:avail,assigned:off.filter(o=>o.status==='assigned').length},incidents:{active:active.length,unassigned:unassigned.length,criticalUnassigned:critUnassigned.length},kpi});
+        if (geminiReply) return geminiReply;
+        let r = `<strong>📡 OPERATIONAL SNAPSHOT</strong><br><br>`;
+        r += `<strong>Force:</strong> ${avail} available · ${off.filter(o=>o.status==='assigned').length} deployed · ${off.filter(o=>o.status==='off-duty').length} off-duty<br>`;
+        r += `<strong>Incidents:</strong> ${active.length} active · ${unassigned.length} unassigned<br>`;
+        if(kpi) r += `<strong>KPIs:</strong> ${kpi.totalIncidentsMTD} MTD · ${kpi.avgResponseTimeMin}m avg response · ${kpi.dutyCompletionRate}% duty completion<br>`;
+        if(critUnassigned.length) r += `<br>⚠️ <strong>${critUnassigned.length} unassigned critical incident(s)!</strong>`;
+        return r;
       }
-
       case 'available_officers': {
         const off = await novaFetch('/api/v1/officers');
-        const avail = off.filter(o => o.status === 'available');
-        if (!avail.length) return '🔴 No officers currently available. All are deployed or off-duty.';
-        reply = `<strong>✅ ${avail.length} Officer(s) Available</strong><br><br>`;
-        reply += fmtTable(['Name', 'Rank', 'Badge'], avail.map(o => [o.name, o.rank, o.badge]));
-        break;
+        const avail = off.filter(o=>o.status==='available');
+        if(!avail.length) return '🔴 No officers currently available.';
+        const geminiReply = await geminiFormat(userMsg, 'Available officers', avail);
+        if (geminiReply) return geminiReply + '<br><br>' + fmtTable(['Name','Rank','Badge'], avail.map(o=>[o.name,o.rank,o.badge]));
+        return `<strong>✅ ${avail.length} Available</strong><br><br>` + fmtTable(['Name','Rank','Badge'], avail.map(o=>[o.name,o.rank,o.badge]));
       }
-
       case 'offduty_officers': {
         const off = await novaFetch('/api/v1/officers');
-        const od = off.filter(o => o.status === 'off-duty' || o.status === 'offduty');
-        if (!od.length) return '✅ No officers are off-duty. Full force is active.';
-        reply = `<strong>😴 ${od.length} Officer(s) Off-Duty</strong><br><br>`;
-        reply += fmtTable(['Name', 'Rank'], od.map(o => [o.name, o.rank]));
-        break;
+        const od = off.filter(o=>o.status==='off-duty'||o.status==='offduty');
+        if(!od.length) return '✅ Full force active — no officers off-duty.';
+        return `<strong>😴 ${od.length} Off-Duty</strong><br><br>` + fmtTable(['Name','Rank'], od.map(o=>[o.name,o.rank]));
       }
-
       case 'all_officers': {
         const off = await novaFetch('/api/v1/officers');
-        reply = `<strong>👮 Force Roster — ${off.length} Officers</strong><br><br>`;
-        reply += fmtTable(['Name', 'Rank', 'Status'], off.map(o => [o.name, o.rank, statusDot(o.status)]));
-        break;
+        return `<strong>👮 ${off.length} Officers</strong><br><br>` + fmtTable(['Name','Rank','Status'], off.map(o=>[o.name,o.rank,dot(o.status)]));
       }
-
       case 'unassigned_incidents': {
         const inc = await novaFetch('/api/v1/incidents?assigned=false');
-        const active = inc.filter(i => !i.resolvedAt);
-        if (!active.length) return '✅ All incidents are currently assigned. No pending calls.';
-        reply = `<strong>🔔 ${active.length} Unassigned Incident(s)</strong><br><br>`;
-        reply += fmtTable(['ID', 'Type', 'Location', 'Priority'],
-          active.map(i => [i.id, i.type, i.location, priorityBadge(i.priority)]));
-        break;
+        const active = inc.filter(i=>!i.resolvedAt);
+        if(!active.length) return '✅ All incidents assigned.';
+        return `<strong>🔔 ${active.length} Unassigned</strong><br><br>` + fmtTable(['ID','Type','Location','Priority'], active.map(i=>[i.id,i.type,i.location,badge(i.priority)]));
       }
-
       case 'critical_incidents': {
         const inc = await novaFetch('/api/v1/incidents?priority=Critical');
-        const active = inc.filter(i => !i.resolvedAt);
-        if (!active.length) return '✅ No critical incidents at this time.';
-        reply = `<strong>🔴 ${active.length} Critical Incident(s)</strong><br><br>`;
-        reply += fmtTable(['ID', 'Type', 'Location', 'Assigned'],
-          active.map(i => [i.id, i.type, i.location, i.assignedTo || '❌ Unassigned']));
-        break;
+        const active = inc.filter(i=>!i.resolvedAt);
+        if(!active.length) return '✅ No critical incidents.';
+        return `<strong>🔴 ${active.length} Critical</strong><br><br>` + fmtTable(['ID','Type','Location','Assigned'], active.map(i=>[i.id,i.type,i.location,i.assignedTo||'❌ Unassigned']));
       }
-
       case 'all_incidents': {
         const inc = await novaFetch('/api/v1/incidents');
-        const active = inc.filter(i => !i.resolvedAt);
-        if (!active.length) return '✅ No active incidents.';
-        reply = `<strong>📋 ${active.length} Active Incident(s)</strong><br><br>`;
-        reply += fmtTable(['ID', 'Type', 'Priority', 'Assigned'],
-          active.slice(0, 10).map(i => [i.id, i.type, priorityBadge(i.priority), i.assignedTo || '—']));
-        if (active.length > 10) reply += `<br><em>Showing 10 of ${active.length}</em>`;
-        break;
+        const active = inc.filter(i=>!i.resolvedAt);
+        if(!active.length) return '✅ No active incidents.';
+        return `<strong>📋 ${active.length} Active Incidents</strong><br><br>` + fmtTable(['ID','Type','Priority','Assigned'], active.slice(0,10).map(i=>[i.id,i.type,badge(i.priority),i.assignedTo||'—']));
       }
-
       case 'assign': {
-        const incId = extractId(userMsg);
-        if (!incId) return 'Please specify an incident ID. Example: <em>"Assign nearest officer to incident 7"</em>';
-
-        const [inc, off] = await Promise.all([
-          novaFetch('/api/v1/incidents'),
-          novaFetch('/api/v1/officers'),
-        ]);
-        const incident = inc.find(i => i.id === incId);
-        if (!incident) return `❌ Incident #${incId} not found.`;
-        if (incident.resolvedAt) return `ℹ️ Incident #${incId} is already resolved.`;
-        if (incident.assignedTo) return `ℹ️ Incident #${incId} is already assigned to <strong>${incident.assignedTo}</strong>.`;
-
-        const avail = off.filter(o => o.status === 'available');
-        if (!avail.length) return '🔴 No available officers to assign. All are deployed.';
-
-        // Find nearest officer (or first available if no coordinates)
+        const incId = id || extractId(userMsg);
+        if(!incId) return 'Please include an incident ID. Example: <em>"Assign to incident 7"</em>';
+        const [inc, off] = await Promise.all([novaFetch('/api/v1/incidents'), novaFetch('/api/v1/officers')]);
+        const incident = inc.find(i=>i.id===incId);
+        if(!incident) return `❌ Incident #${incId} not found.`;
+        if(incident.resolvedAt) return `Incident #${incId} is already resolved.`;
+        if(incident.assignedTo) return `Incident #${incId} is already assigned to <strong>${incident.assignedTo}</strong>.`;
+        const avail = off.filter(o=>o.status==='available');
+        if(!avail.length) return '🔴 No available officers.';
         let best = avail[0], bestDist = Infinity;
-        if (incident.mapPos?.lat && incident.mapPos?.lng) {
-          avail.forEach(o => {
-            if (o.mapPos?.lat && o.mapPos?.lng) {
-              const d = haversine(o.mapPos.lat, o.mapPos.lng, incident.mapPos.lat, incident.mapPos.lng);
-              if (d < bestDist) { bestDist = d; best = o; }
-            }
-          });
-        } else if (incident.lat && incident.lng) {
-          avail.forEach(o => {
-            if (o.lat && o.lng) {
-              const d = haversine(o.lat, o.lng, incident.lat, incident.lng);
-              if (d < bestDist) { bestDist = d; best = o; }
-            }
-          });
-        }
-
-        const distStr = bestDist < Infinity ? ` — ${bestDist.toFixed(1)} km away` : '';
-        window._novaPending = { action: 'assign', incidentId: incId, officerId: best.id, officerName: best.name };
-
-        reply = `<strong>📍 Assignment Recommendation</strong><br><br>`;
-        reply += `Incident <strong>#${incId}</strong>: ${incident.type} at ${incident.location} (${priorityBadge(incident.priority)})<br>`;
-        reply += `Best match: <strong>${best.name}</strong> (${best.rank}, Badge ${best.badge})${distStr}<br><br>`;
-        reply += `<strong>Confirm assignment?</strong> <em>(yes / no)</em>`;
-        break;
+        avail.forEach(o => {
+          const oLat = o.mapPos?.lat||o.lat, oLng = o.mapPos?.lng||o.lng;
+          const iLat = incident.mapPos?.lat||incident.lat, iLng = incident.mapPos?.lng||incident.lng;
+          if(oLat&&oLng&&iLat&&iLng) { const d=haversine(oLat,oLng,iLat,iLng); if(d<bestDist){bestDist=d;best=o;} }
+        });
+        window._novaPending = {action:'assign', incidentId:incId, officerId:best.id, officerName:best.name};
+        const distStr = bestDist<Infinity ? ` (${bestDist.toFixed(1)} km away)` : '';
+        return `<strong>📍 Recommendation</strong><br><br>Incident <strong>#${incId}</strong>: ${incident.type} at ${incident.location} — ${badge(incident.priority)}<br>Best match: <strong>${best.name}</strong> (${best.rank})${distStr}<br><br><strong>Confirm?</strong> <em>yes / no</em>`;
       }
-
       case 'resolve': {
-        const incId = extractId(userMsg);
-        if (!incId) return 'Please specify an incident ID. Example: <em>"Resolve incident 5"</em>';
-        window._novaPending = { action: 'resolve', incidentId: incId };
-        reply = `Ready to resolve incident <strong>#${incId}</strong>.<br><strong>Confirm?</strong> <em>(yes / no)</em>`;
-        break;
+        const incId = id || extractId(userMsg);
+        if(!incId) return 'Please include an incident ID. Example: <em>"Resolve incident 5"</em>';
+        window._novaPending = {action:'resolve', incidentId:incId};
+        return `Resolve incident <strong>#${incId}</strong>? <strong>Confirm?</strong> <em>yes / no</em>`;
       }
-
       case 'complete_duty': {
-        const dutyId = extractId(userMsg);
-        if (!dutyId) return 'Please specify a duty ID. Example: <em>"Complete duty 3"</em>';
-        window._novaPending = { action: 'complete_duty', dutyId: dutyId };
-        reply = `Ready to mark duty <strong>#${dutyId}</strong> as complete.<br><strong>Confirm?</strong> <em>(yes / no)</em>`;
-        break;
+        const dutyId = id || extractId(userMsg);
+        if(!dutyId) return 'Please include a duty ID. Example: <em>"Complete duty 3"</em>';
+        window._novaPending = {action:'complete_duty', dutyId};
+        return `Mark duty <strong>#${dutyId}</strong> complete? <strong>Confirm?</strong> <em>yes / no</em>`;
       }
-
       case 'active_duties': {
         const dut = await novaFetch('/api/v1/duties?completed=false');
-        if (!dut.length) return '✅ No active duties right now.';
-        reply = `<strong>📋 ${dut.length} Active Duties</strong><br><br>`;
-        reply += fmtTable(['ID', 'Type', 'Officer', 'Location', 'Priority'],
-          dut.map(d => [d.id, d.type, d.officerName, d.location, priorityBadge(d.priority)]));
-        break;
+        if(!dut.length) return '✅ No active duties.';
+        return `<strong>📋 ${dut.length} Active Duties</strong><br><br>` + fmtTable(['ID','Type','Officer','Location','Priority'], dut.map(d=>[d.id,d.type,d.officerName,d.location,badge(d.priority)]));
       }
-
       case 'all_duties': {
         const dut = await novaFetch('/api/v1/duties');
-        reply = `<strong>📋 ${dut.length} Total Duties</strong><br><br>`;
-        reply += fmtTable(['ID', 'Type', 'Officer', 'Status'],
-          dut.slice(0, 10).map(d => [d.id, d.type, d.officerName, d.completed ? '✅ Done' : '🔄 Active']));
-        if (dut.length > 10) reply += `<br><em>Showing 10 of ${dut.length}</em>`;
-        break;
+        return `<strong>📋 ${dut.length} Duties</strong><br><br>` + fmtTable(['ID','Type','Officer','Status'], dut.slice(0,10).map(d=>[d.id,d.type,d.officerName,d.completed?'✅':'🔄']));
       }
-
-      case 'performance': {
-        const perf = await novaFetch('/api/v1/analytics/officer-performance');
-        if (!perf.length) return 'No performance data available yet.';
-        reply = `<strong>🏆 Officer Performance Leaderboard</strong><br><br>`;
-        reply += fmtTable(['#', 'Name', 'Duties Done', 'Avg RT', 'Rating'],
-          perf.slice(0, 8).map(p => [p.rank, p.name, p.dutiesCompleted, p.avgResponseMin ? p.avgResponseMin + 'm' : '—', p.rating + '%']));
-        break;
-      }
-
       case 'kpi': {
         const kpi = await novaFetch('/api/v1/analytics/kpi');
-        reply = `<strong>📊 KPI Dashboard</strong><br><br>`;
-        reply += `• <strong>Incidents MTD:</strong> ${kpi.totalIncidentsMTD} (${kpi.totalIncidentsMTDTrend > 0 ? '↑' : '↓'}${Math.abs(kpi.totalIncidentsMTDTrend)}%)<br>`;
-        reply += `• <strong>Avg Response Time:</strong> ${kpi.avgResponseTimeMin} min ${kpi.avgResponseTimeMin <= 10 ? '✅ within target' : '⚠️ above 10-min target'}<br>`;
-        reply += `• <strong>Critical Today:</strong> ${kpi.criticalIncidentsToday}<br>`;
-        reply += `• <strong>Duty Completion:</strong> ${kpi.dutyCompletionRate}%`;
-        break;
+        const geminiReply = await geminiFormat(userMsg, 'KPI metrics', kpi);
+        if(geminiReply) return geminiReply;
+        return `<strong>📊 KPIs</strong><br><br>• Incidents MTD: ${kpi.totalIncidentsMTD}<br>• Avg Response: ${kpi.avgResponseTimeMin} min<br>• Critical Today: ${kpi.criticalIncidentsToday}<br>• Duty Completion: ${kpi.dutyCompletionRate}%`;
       }
-
+      case 'performance': {
+        const perf = await novaFetch('/api/v1/analytics/officer-performance');
+        if(!perf.length) return 'No performance data yet.';
+        const geminiReply = await geminiFormat(userMsg, 'Officer performance leaderboard', perf.slice(0,5));
+        if(geminiReply) return geminiReply + '<br><br>' + fmtTable(['#','Name','Duties','Avg RT','Rating'], perf.slice(0,8).map(p=>[p.rank,p.name,p.dutiesCompleted,p.avgResponseMin?p.avgResponseMin+'m':'—',p.rating+'%']));
+        return `<strong>🏆 Leaderboard</strong><br><br>` + fmtTable(['#','Name','Duties','Rating'], perf.slice(0,8).map(p=>[p.rank,p.name,p.dutiesCompleted,p.rating+'%']));
+      }
       case 'priority_dist': {
         const pd = await novaFetch('/api/v1/analytics/priority-distribution');
-        reply = `<strong>📊 Priority Distribution</strong> (${pd.total} total incidents)<br><br>`;
-        pd.distribution.forEach(d => {
-          const filled = Math.round(d.percent / 5);
-          const bar = '█'.repeat(filled) + '░'.repeat(20 - filled);
-          reply += `${priorityBadge(d.priority)}: ${bar} ${d.percent}% (${d.count})<br>`;
-        });
-        break;
+        let r = `<strong>📊 Priority Distribution</strong> (${pd.total} total)<br><br>`;
+        pd.distribution.forEach(d => { r += `${badge(d.priority)}: ${'█'.repeat(Math.round(d.percent/5))}${'░'.repeat(20-Math.round(d.percent/5))} ${d.percent}% (${d.count})<br>`; });
+        return r;
       }
-
       case 'alerts': {
         const al = await novaFetch('/api/v1/alerts');
-        if (!al.length) return '✅ No active alerts in the system.';
-        reply = `<strong>🔔 ${al.length} Alert(s)</strong><br><br>`;
-        al.slice(0, 5).forEach(a => {
-          reply += `<strong>${a.title}</strong><br><span style="color:var(--text-muted);font-size:0.8em">${a.description || a.desc || ''}</span><br><br>`;
-        });
-        break;
+        if(!al.length) return '✅ No active alerts.';
+        let r = `<strong>🔔 ${al.length} Alert(s)</strong><br><br>`;
+        al.slice(0,5).forEach(a => { r += `<strong>${a.title}</strong><br><span style="color:var(--text-muted);font-size:0.8em">${a.description||''}</span><br><br>`; });
+        return r;
       }
-
       case 'help':
-        reply = `<strong>🤖 NOVA Command Guide</strong><br><br>`;
-        reply += `<strong>📡 Situational Awareness</strong><br>`;
-        reply += `• "What's the current situation?"<br>`;
-        reply += `• "Give me a status update"<br><br>`;
-        reply += `<strong>👮 Officers</strong><br>`;
-        reply += `• "Who's available?" / "Show all officers"<br>`;
-        reply += `• "Who's off duty?"<br><br>`;
-        reply += `<strong>🚨 Incidents</strong><br>`;
-        reply += `• "Show unassigned incidents"<br>`;
-        reply += `• "List critical incidents"<br>`;
-        reply += `• "Show all incidents"<br><br>`;
-        reply += `<strong>⚡ Actions (Admin/Dispatcher)</strong><br>`;
-        reply += `• "Assign nearest officer to incident 7"<br>`;
-        reply += `• "Resolve incident 5"<br>`;
-        reply += `• "Complete duty 3"<br><br>`;
-        reply += `<strong>📋 Duties</strong><br>`;
-        reply += `• "Active duties" / "All duties"<br><br>`;
-        reply += `<strong>📊 Analytics</strong><br>`;
-        reply += `• "Show KPIs" / "Officer performance"<br>`;
-        reply += `• "Priority distribution"`;
-        break;
-
+        return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"${getGeminiKey() ? '<br><br>✨ <strong>Gemini AI active</strong> — ask anything in natural language!' : '<br><br>💡 Add Gemini API key via ⚙️ for natural language mode.'}`;
       default:
-        // If there's a pending action, remind them
-        if (window._novaPending) {
-          const p = window._novaPending;
-          return `Waiting for confirmation on: <strong>${p.action.replace('_', ' ')} #${p.incidentId || p.dutyId}</strong>.<br>Reply <strong>yes</strong> to confirm or <strong>no</strong> to cancel.`;
+        if(window._novaPending) return `Waiting for confirmation. Reply <strong>yes</strong> or <strong>no</strong>.`;
+        if(getGeminiKey()) {
+          const freeReply = await callGemini(`You are NOVA, a police dispatch AI for POLITECH (Tumkur Region). Answer concisely. If asked about live data, say you need a specific command like "show incidents" or "who's available". Keep replies under 3 sentences.`, userMsg);
+          if(freeReply) return freeReply;
         }
-        reply = `I didn't quite understand that. Try rephrasing, or type <strong>"help"</strong> to see all available commands.`;
+        return `I didn't understand that. Type <strong>"help"</strong> for available commands.`;
     }
-
-  } catch (e) {
-    reply = `⚠️ <strong>API Error:</strong> ${e.message}<br><small>Check that you're logged in and the backend is reachable.</small>`;
+  } catch(e) {
+    return `⚠️ <strong>Error:</strong> ${e.message}`;
   }
-
-  return reply;
 }
 
-// ── UI Rendering ──────────────────────────────────────
+// ── Settings UI ───────────────────────────────────────
+function novaOpenSettings() {
+  const key = getGeminiKey();
+  const panel = document.getElementById('novaSettingsPanel');
+  if(panel) { panel.style.display = panel.style.display==='none'?'block':'none'; return; }
+  const s = document.createElement('div');
+  s.id = 'novaSettingsPanel';
+  s.style.cssText = 'position:absolute;top:56px;right:0;left:0;background:var(--navy-2);border-bottom:1px solid var(--glass-border);padding:12px 16px;z-index:10;';
+  s.innerHTML = `
+    <div style="font-size:0.8rem;font-weight:700;color:var(--text-muted);margin-bottom:6px;">✨ Gemini AI API Key</div>
+    <div style="display:flex;gap:8px;">
+      <input id="novaKeyInput" type="password" placeholder="AIza..." value="${key}"
+        style="flex:1;padding:8px 12px;border-radius:8px;border:1px solid var(--glass-border);background:rgba(255,255,255,0.05);color:var(--text);font-size:0.82rem;outline:none;">
+      <button onclick="novaSaveKey()" style="padding:8px 14px;border-radius:8px;border:none;background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;font-size:0.8rem;cursor:pointer;font-weight:700;">Save</button>
+    </div>
+    <div style="font-size:0.72rem;color:var(--text-muted);margin-top:6px;">${key ? '✅ Key saved — Gemini AI active' : 'Get key from aistudio.google.com'}</div>`;
+  document.getElementById('novaPanel').appendChild(s);
+}
+
+function novaSaveKey() {
+  const val = document.getElementById('novaKeyInput').value.trim();
+  setGeminiKey(val);
+  const panel = document.getElementById('novaSettingsPanel');
+  if(panel) panel.remove();
+  addNovaMessage('nova', val ? '✅ <strong>Gemini AI activated!</strong> You can now ask me anything in natural language.' : 'API key removed. Falling back to command mode.');
+}
+
+// ── UI ────────────────────────────────────────────────
 function toggleNova() {
   novaOpen = !novaOpen;
   document.getElementById('novaPanel').classList.toggle('open', novaOpen);
   document.getElementById('novaFab').classList.toggle('active', novaOpen);
-  if (novaOpen && novaMessages.length === 0) {
-    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'})}<br><br>Hello, <strong>${novaUser() || 'Operator'}</strong> (${novaRole() || 'guest'}). I'm your AI command assistant.<br>Type <strong>"help"</strong> to see commands or ask me anything about current operations.`);
+  if(novaOpen && novaMessages.length===0) {
+    const hasKey = getGeminiKey();
+    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}).<br>${hasKey ? '✨ <strong>Gemini AI active</strong> — ask me anything naturally!' : 'Type <strong>"help"</strong> for commands. Add Gemini key via <strong>⚙️</strong> for AI mode.'}`);
   }
 }
 
 function addNovaMessage(role, content) {
-  novaMessages.push({ role, content });
+  novaMessages.push({role, content});
   renderNovaMessages();
 }
 
 function renderNovaMessages() {
-  const container = document.getElementById('novaMessages');
-  if (!container) return;
-  container.innerHTML = novaMessages.map(m => {
-    const isNova = m.role === 'nova';
-    return `<div class="nova-msg ${isNova ? 'nova-bot' : 'nova-user'}">
-      ${isNova ? '<div class="nova-avatar"><i class="fas fa-robot"></i></div>' : ''}
-      <div class="nova-bubble ${isNova ? 'bot' : 'user'}">${m.content}</div>
-    </div>`;
+  const c = document.getElementById('novaMessages');
+  if(!c) return;
+  c.innerHTML = novaMessages.map(m => {
+    const isNova = m.role==='nova';
+    return `<div class="nova-msg ${isNova?'nova-bot':'nova-user'}">${isNova?'<div class="nova-avatar"><i class="fas fa-robot"></i></div>':''}<div class="nova-bubble ${isNova?'bot':'user'}">${m.content}</div></div>`;
   }).join('');
-  container.scrollTop = container.scrollHeight;
+  c.scrollTop = c.scrollHeight;
 }
 
 async function sendNovaMessage() {
   const input = document.getElementById('novaInput');
   const msg = input.value.trim();
-  if (!msg || novaProcessing) return;
+  if(!msg || novaProcessing) return;
   input.value = '';
   addNovaMessage('user', msg);
   novaProcessing = true;
-  const typing = document.getElementById('novaTyping');
-  if (typing) typing.style.display = 'flex';
+  const t = document.getElementById('novaTyping');
+  if(t) t.style.display='flex';
   const reply = await novaRespond(msg);
-  if (typing) typing.style.display = 'none';
+  if(t) t.style.display='none';
   novaProcessing = false;
   addNovaMessage('nova', reply);
 }
 
-// Enter key handler
 document.addEventListener('DOMContentLoaded', () => {
   const input = document.getElementById('novaInput');
-  if (input) input.addEventListener('keydown', e => { if (e.key === 'Enter') sendNovaMessage(); });
+  if(input) input.addEventListener('keydown', e => { if(e.key==='Enter') sendNovaMessage(); });
 });
