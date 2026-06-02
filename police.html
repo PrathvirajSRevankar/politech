@@ -1660,6 +1660,85 @@
     .gm-style-cc {
       display: none !important;
     }
+
+    /* ── NOVA AI CHAT ── */
+    #novaFab {
+      position: fixed; bottom: 24px; right: 24px; z-index: 2000;
+      width: 56px; height: 56px; border-radius: 50%; border: none;
+      background: linear-gradient(135deg, #6366f1, #3b82f6); color: #fff;
+      font-size: 1.3rem; cursor: pointer; display: flex; align-items: center;
+      justify-content: center; box-shadow: 0 6px 24px rgba(99,102,241,0.45);
+      transition: all 0.3s cubic-bezier(0.4,0,0.2,1);
+    }
+    #novaFab:hover { transform: scale(1.1); box-shadow: 0 8px 32px rgba(99,102,241,0.6); }
+    #novaFab.active { background: linear-gradient(135deg, #ef4444, #f59e0b); }
+    #novaFab .fab-badge { position:absolute;top:0;right:0;width:14px;height:14px;border-radius:50%;background:#10b981;border:2px solid var(--navy);animation:pulse-green 2s infinite; }
+
+    #novaPanel {
+      position: fixed; bottom: 92px; right: 24px; z-index: 2000;
+      width: 400px; max-height: 540px; border-radius: 16px;
+      background: var(--navy-2); border: 1px solid var(--glass-border);
+      box-shadow: 0 16px 48px rgba(0,0,0,0.5); display: flex;
+      flex-direction: column; transform: translateY(20px) scale(0.95);
+      opacity: 0; pointer-events: none;
+      transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+    }
+    #novaPanel.open { transform: translateY(0) scale(1); opacity: 1; pointer-events: all; }
+
+    .nova-header {
+      padding: 14px 18px; border-bottom: 1px solid var(--glass-border);
+      display: flex; align-items: center; gap: 10px;
+      background: linear-gradient(135deg, rgba(99,102,241,0.15), rgba(59,130,246,0.1));
+      border-radius: 16px 16px 0 0;
+    }
+    .nova-header-icon { width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,#6366f1,#3b82f6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:1rem; }
+    .nova-header-info h4 { font-size:0.88rem;font-weight:800;color:var(--text); }
+    .nova-header-info span { font-size:0.7rem;color:var(--emerald);font-weight:600; }
+
+    #novaMessages {
+      flex: 1; overflow-y: auto; padding: 14px; display: flex;
+      flex-direction: column; gap: 10px; min-height: 300px; max-height: 380px;
+    }
+    .nova-msg { display: flex; gap: 8px; align-items: flex-end; }
+    .nova-msg.nova-user { justify-content: flex-end; }
+    .nova-avatar { width:28px;height:28px;border-radius:8px;background:linear-gradient(135deg,#6366f1,#3b82f6);display:flex;align-items:center;justify-content:center;color:#fff;font-size:0.7rem;flex-shrink:0; }
+    .nova-bubble { max-width: 85%; padding: 10px 14px; border-radius: 12px; font-size: 0.82rem; line-height: 1.55; }
+    .nova-bubble.bot { background: rgba(99,102,241,0.12); border: 1px solid rgba(99,102,241,0.2); color: var(--text); border-bottom-left-radius: 4px; }
+    .nova-bubble.user { background: var(--electric); color: #fff; border-bottom-right-radius: 4px; }
+
+    .nova-table { width:100%; border-collapse:collapse; margin:6px 0; font-size:0.75rem; }
+    .nova-table th { text-align:left; padding:4px 6px; color:var(--text-muted); border-bottom:1px solid var(--glass-border); font-weight:700; }
+    .nova-table td { padding:4px 6px; border-bottom:1px solid rgba(255,255,255,0.04); }
+
+    .nova-input-bar {
+      padding: 12px; border-top: 1px solid var(--glass-border);
+      display: flex; gap: 8px; align-items: center;
+    }
+    #novaInput {
+      flex: 1; padding: 10px 14px; border-radius: 10px;
+      border: 1px solid var(--glass-border); background: rgba(255,255,255,0.05);
+      color: var(--text); font-size: 0.85rem; outline: none; transition: var(--tr);
+    }
+    #novaInput:focus { border-color: #6366f1; box-shadow: 0 0 0 3px rgba(99,102,241,0.15); }
+    #novaInput::placeholder { color: var(--text-muted); }
+    .nova-send {
+      width:38px;height:38px;border-radius:10px;border:none;
+      background:linear-gradient(135deg,#6366f1,#3b82f6);color:#fff;
+      cursor:pointer;display:flex;align-items:center;justify-content:center;
+      transition:var(--tr); font-size:0.85rem;
+    }
+    .nova-send:hover { transform:scale(1.08); box-shadow:0 4px 16px rgba(99,102,241,0.4); }
+
+    #novaTyping {
+      display:none; padding:4px 14px 8px; align-items:center; gap:8px;
+      font-size:0.75rem; color:var(--text-muted);
+    }
+    .typing-dots span { display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--electric);animation:typingBounce 1.4s infinite; }
+    .typing-dots span:nth-child(2) { animation-delay:0.2s; }
+    .typing-dots span:nth-child(3) { animation-delay:0.4s; }
+    @keyframes typingBounce { 0%,80%,100%{transform:translateY(0)} 40%{transform:translateY(-6px)} }
+
+    @media(max-width:500px) { #novaPanel { width: calc(100vw - 32px); right: 16px; bottom: 80px; } }
   </style>
 </head>
 
@@ -1876,7 +1955,29 @@
     </div><!-- /main-content -->
   </div><!-- /app-shell -->
 
+  <!-- NOVA AI FAB + PANEL -->
+  <button id="novaFab" onclick="toggleNova()" title="NOVA Assistant">
+    <i class="fas fa-robot"></i>
+    <span class="fab-badge"></span>
+  </button>
+  <div id="novaPanel">
+    <div class="nova-header">
+      <div class="nova-header-icon"><i class="fas fa-robot"></i></div>
+      <div class="nova-header-info">
+        <h4>NOVA Command Assistant</h4>
+        <span>● Online — Tumkur Region</span>
+      </div>
+    </div>
+    <div id="novaMessages"></div>
+    <div id="novaTyping"><div class="typing-dots"><span></span><span></span><span></span></div> NOVA is thinking…</div>
+    <div class="nova-input-bar">
+      <input type="text" id="novaInput" placeholder="Ask NOVA a command…" autocomplete="off">
+      <button class="nova-send" onclick="sendNovaMessage()"><i class="fas fa-paper-plane"></i></button>
+    </div>
+  </div>
+
   <script src="app.js"></script>
+  <script src="nova.js"></script>
 
   <!-- Google Maps JavaScript API -->
   <script async defer
