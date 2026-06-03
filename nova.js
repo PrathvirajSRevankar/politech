@@ -1,10 +1,9 @@
 // ══════════════════════════════════════════════════════
-// NOVA v3 — Gemini 2.0 Flash AI Command Assistant
-// Powered by Google Gemini via secure backend proxy
+// NOVA v4 — Knowledge Base Command Assistant
+// Answers powered by POLITECH Q&A database
 // ══════════════════════════════════════════════════════
 
 const NOVA_API = 'https://politech.onrender.com';
-const GEMINI_MODEL = 'gemini-2.0-flash';
 
 let novaOpen = false;
 let novaMessages = [];
@@ -26,6 +25,20 @@ async function novaFetch(path, opts = {}) {
   return res.json();
 }
 
+// ── Q&A Knowledge Base lookup ─────────────────────────
+async function novaAsk(message) {
+  try {
+    const res = await fetch(NOVA_API + '/api/v1/nova/chat', {
+      method: 'POST',
+      headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message })
+    });
+    if (!res.ok) return null;
+    const data = await res.json();
+    return data.reply || null;
+  } catch { return null; }
+}
+
 // ── Haversine ─────────────────────────────────────────
 function haversine(lat1, lon1, lat2, lon2) {
   const R = 6371, dLat = (lat2-lat1)*Math.PI/180, dLon = (lon2-lon1)*Math.PI/180;
@@ -44,61 +57,8 @@ function dot(s) { const c={available:'#10b981',assigned:'#3b82f6','off-duty':'#6
 function badge(p) { const c={Critical:'#ef4444',High:'#f59e0b',Medium:'#3b82f6',Low:'#10b981'}; return `<span style="color:${c[p]||'#94a3b8'};font-weight:700">${p||'—'}</span>`; }
 function extractId(msg) { const m=msg.match(/\b(\d+)\b/); return m?parseInt(m[1]):null; }
 
-// ── Backend Gemini proxy ─────────────────────────────
-let novaChatHistory = [];
-
-async function novaGemini(userMsg) {
-  try {
-    const res = await fetch(NOVA_API + '/api/v1/nova/chat', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: userMsg, history: novaChatHistory.slice(-6) })
-    });
-    if (res.status === 429) return '⏳ Gemini is rate-limited. Please wait a moment and try again.';
-    if (!res.ok) return null;
-    const data = await res.json();
-    // Update history for context
-    novaChatHistory.push({ role: 'user', text: userMsg });
-    novaChatHistory.push({ role: 'model', text: data.reply });
-    if (novaChatHistory.length > 20) novaChatHistory = novaChatHistory.slice(-20);
-    return data.reply;
-  } catch { return null; }
-}
-
-// Keep geminiFormat for enriching structured responses
-async function geminiFormat(userMsg, dataLabel, dataJson) {
-  try {
-    const prompt = `The dispatcher asked: "${userMsg}". Live data (${dataLabel}): ${JSON.stringify(dataJson).slice(0,1500)}. Write a concise 2-3 sentence operational summary using specific numbers/names from the data. Professional tone.`;
-    const res = await fetch(NOVA_API + '/api/v1/nova/chat', {
-      method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + novaToken(), 'Content-Type': 'application/json' },
-      body: JSON.stringify({ message: prompt, history: [] })
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    return data.reply;
-  } catch { return null; }
-}
-
-// ── Gemini intent classifier (via backend) ───────────
-const INTENT_SYSTEM = `You are a police dispatch AI assistant intent classifier. 
-Given a user message, respond ONLY with a JSON object (no markdown) with:
-- "intent": one of: situation, available_officers, offduty_officers, all_officers, unassigned_incidents, critical_incidents, all_incidents, assign, resolve, complete_duty, active_duties, all_duties, kpi, performance, priority_dist, alerts, help, confirm, cancel, unknown
-- "id": extracted number if present (incident/duty ID), or null
-
-Examples:
-"who is free right now" -> {"intent":"available_officers","id":null}
-"send someone to incident 5" -> {"intent":"assign","id":5}
-"what is happening" -> {"intent":"situation","id":null}
-"yes go ahead" -> {"intent":"confirm","id":null}`;
-
-async function classifyIntent(msg) {
-  // Use local classifier to avoid wasting Gemini API quota on intent detection.
-  // Gemini is reserved for actual response generation only.
-  return fallbackClassify(msg);
-}
-
-function fallbackClassify(msg) {
+// ── Intent Classifier (local, no API calls) ───────────
+function classifyIntent(msg) {
   const m = msg.toLowerCase().trim();
   const id = extractId(msg);
   if (/^(yes|y|confirm|go|proceed|sure|ok|yep)$/i.test(m)) return {intent:'confirm',id:null};
@@ -123,11 +83,9 @@ function fallbackClassify(msg) {
   return {intent:'unknown',id:null};
 }
 
-// ── (Duplicate geminiFormat removed — backend proxy version above is used) ────
-
 // ── Execute tool & build reply ────────────────────────
 async function novaRespond(userMsg) {
-  const { intent, id } = await classifyIntent(userMsg);
+  const { intent, id } = classifyIntent(userMsg);
 
   // Pending confirmation
   if (intent === 'confirm' && window._novaPending) {
@@ -160,8 +118,6 @@ async function novaRespond(userMsg) {
         const active = inc.filter(i=>!i.resolvedAt);
         const unassigned = active.filter(i=>!i.assignedTo);
         const critUnassigned = unassigned.filter(i=>i.priority==='Critical');
-        const geminiReply = await geminiFormat(userMsg, 'Operational snapshot', {officers:{total:off.length,available:avail,assigned:off.filter(o=>o.status==='assigned').length},incidents:{active:active.length,unassigned:unassigned.length,criticalUnassigned:critUnassigned.length},kpi});
-        if (geminiReply) return geminiReply;
         let r = `<strong>📡 OPERATIONAL SNAPSHOT</strong><br><br>`;
         r += `<strong>Force:</strong> ${avail} available · ${off.filter(o=>o.status==='assigned').length} deployed · ${off.filter(o=>o.status==='off-duty').length} off-duty<br>`;
         r += `<strong>Incidents:</strong> ${active.length} active · ${unassigned.length} unassigned<br>`;
@@ -173,8 +129,6 @@ async function novaRespond(userMsg) {
         const off = await novaFetch('/api/v1/officers');
         const avail = off.filter(o=>o.status==='available');
         if(!avail.length) return '🔴 No officers currently available.';
-        const geminiReply = await geminiFormat(userMsg, 'Available officers', avail);
-        if (geminiReply) return geminiReply + '<br><br>' + fmtTable(['Name','Rank','Badge'], avail.map(o=>[o.name,o.rank,o.badge]));
         return `<strong>✅ ${avail.length} Available</strong><br><br>` + fmtTable(['Name','Rank','Badge'], avail.map(o=>[o.name,o.rank,o.badge]));
       }
       case 'offduty_officers': {
@@ -248,16 +202,12 @@ async function novaRespond(userMsg) {
       }
       case 'kpi': {
         const kpi = await novaFetch('/api/v1/analytics/kpi');
-        const geminiReply = await geminiFormat(userMsg, 'KPI metrics', kpi);
-        if(geminiReply) return geminiReply;
         return `<strong>📊 KPIs</strong><br><br>• Incidents MTD: ${kpi.totalIncidentsMTD}<br>• Avg Response: ${kpi.avgResponseTimeMin} min<br>• Critical Today: ${kpi.criticalIncidentsToday}<br>• Duty Completion: ${kpi.dutyCompletionRate}%`;
       }
       case 'performance': {
         const perf = await novaFetch('/api/v1/analytics/officer-performance');
         if(!perf.length) return 'No performance data yet.';
-        const geminiReply = await geminiFormat(userMsg, 'Officer performance leaderboard', perf.slice(0,5));
-        if(geminiReply) return geminiReply + '<br><br>' + fmtTable(['#','Name','Duties','Avg RT','Rating'], perf.slice(0,8).map(p=>[p.rank,p.name,p.dutiesCompleted,p.avgResponseMin?p.avgResponseMin+'m':'—',p.rating+'%']));
-        return `<strong>🏆 Leaderboard</strong><br><br>` + fmtTable(['#','Name','Duties','Rating'], perf.slice(0,8).map(p=>[p.rank,p.name,p.dutiesCompleted,p.rating+'%']));
+        return `<strong>🏆 Leaderboard</strong><br><br>` + fmtTable(['#','Name','Duties','Avg RT','Rating'], perf.slice(0,8).map(p=>[p.rank,p.name,p.dutiesCompleted,p.avgResponseMin?p.avgResponseMin+'m':'—',p.rating+'%']));
       }
       case 'priority_dist': {
         const pd = await novaFetch('/api/v1/analytics/priority-distribution');
@@ -273,11 +223,13 @@ async function novaRespond(userMsg) {
         return r;
       }
       case 'help':
-        return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"<br><br>✨ <strong>Powered by Google Gemini 2.0 Flash</strong> — ask anything in natural language!`;
-      default:
+        return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"<br><br>📚 <strong>Knowledge Base active</strong> — ask me anything about POLITECH!`;
+      default: {
         if(window._novaPending) return `Waiting for confirmation. Reply <strong>yes</strong> or <strong>no</strong>.`;
-        const freeReply = await novaGemini(userMsg);
-        return freeReply || `I didn't understand that. Type <strong>"help"</strong> for available commands.`;
+        // Look up in Q&A knowledge base
+        const kbReply = await novaAsk(userMsg);
+        return kbReply || `I don't have an answer for that yet. Type <strong>"help"</strong> for available commands.`;
+      }
     }
   } catch(e) {
     return `⚠️ <strong>Error:</strong> ${e.message}`;
@@ -286,7 +238,7 @@ async function novaRespond(userMsg) {
 
 // ── Settings UI ───────────────────────────────────────
 function novaOpenSettings() {
-  addNovaMessage('nova', '✨ <strong>Gemini AI is handled server-side</strong> — no API key needed. You are already connected!');
+  addNovaMessage('nova', '📚 <strong>NOVA Knowledge Base</strong><br><br>NOVA uses a built-in Q&A database with <strong>36 answers</strong> about POLITECH — no external AI required. All answers are instant and always available.');
 }
 
 // ── UI ────────────────────────────────────────────────
@@ -295,7 +247,7 @@ function toggleNova() {
   document.getElementById('novaPanel').classList.toggle('open', novaOpen);
   document.getElementById('novaFab').classList.toggle('active', novaOpen);
   if(novaOpen && novaMessages.length===0) {
-    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}).<br><br>✨ I'm powered by <strong>Google Gemini 2.0 Flash</strong> — your AI command assistant for the Tumkur Region. Ask me anything in natural language or type <strong>"help"</strong> for operational commands.`);
+    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}).<br><br>📚 I have a built-in <strong>Knowledge Base</strong> with answers about POLITECH. I can also help with live operations — type <strong>"help"</strong> to see all commands.`);
   }
 }
 

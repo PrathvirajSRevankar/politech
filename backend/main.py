@@ -16,6 +16,7 @@ import models.officer   # noqa: F401
 import models.incident  # noqa: F401
 import models.duty      # noqa: F401
 import models.alert     # noqa: F401
+import models.nova_qa   # noqa: F401
 
 # Import routers
 from routers import ws, officers, incidents, duties, alerts, stats, analytics, nova
