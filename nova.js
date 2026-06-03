@@ -93,14 +93,8 @@ Examples:
 "yes go ahead" -> {"intent":"confirm","id":null}`;
 
 async function classifyIntent(msg) {
-  try {
-    const geminiResult = await novaGemini(INTENT_SYSTEM + '\n\nClassify this message (JSON only): ' + msg);
-    if (geminiResult) {
-      const cleaned = geminiResult.replace(/```json|```/g, '').trim();
-      const parsed = JSON.parse(cleaned);
-      if (parsed.intent) return parsed;
-    }
-  } catch {}
+  // Use local classifier to avoid wasting Gemini API quota on intent detection.
+  // Gemini is reserved for actual response generation only.
   return fallbackClassify(msg);
 }
 
