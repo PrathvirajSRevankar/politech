@@ -1,5 +1,6 @@
 // ══════════════════════════════════════════════════════
-// NOVA v3 — Gemini-powered AI Command Assistant
+// NOVA v3 — Gemini 2.0 Flash AI Command Assistant
+// Powered by Google Gemini via secure backend proxy
 // ══════════════════════════════════════════════════════
 
 const NOVA_API = 'https://politech.onrender.com';
@@ -128,18 +129,7 @@ function fallbackClassify(msg) {
   return {intent:'unknown',id:null};
 }
 
-// ── Gemini response formatter ─────────────────────────
-async function geminiFormat(userMsg, dataLabel, dataJson) {
-  if (!getGeminiKey()) return null;
-  const prompt = `You are NOVA, an AI police command assistant for the Tumkur Region, Karnataka.
-The dispatcher asked: "${userMsg}"
-Here is the live data retrieved: ${dataLabel}
-Data: ${JSON.stringify(dataJson).slice(0, 2000)}
-
-Write a concise, professional operational response (2-5 sentences). Use specific numbers and names from the data. 
-Do NOT use markdown headers. Keep it brief and actionable.`;
-  return await callGemini('You are NOVA, a concise police dispatch AI assistant.', prompt);
-}
+// ── (Duplicate geminiFormat removed — backend proxy version above is used) ────
 
 // ── Execute tool & build reply ────────────────────────
 async function novaRespond(userMsg) {
@@ -289,7 +279,7 @@ async function novaRespond(userMsg) {
         return r;
       }
       case 'help':
-        return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"${getGeminiKey() ? '<br><br>✨ <strong>Gemini AI active</strong> — ask anything in natural language!' : '<br><br>💡 Add Gemini API key via ⚙️ for natural language mode.'}`;
+        return `<strong>🤖 NOVA Commands</strong><br><br><strong>Situation:</strong> "What's happening?" / "Give me a sitrep"<br><strong>Officers:</strong> "Who's available?" / "Show all officers" / "Who's off duty?"<br><strong>Incidents:</strong> "Unassigned incidents" / "Critical incidents" / "All incidents"<br><strong>Duties:</strong> "Active duties" / "All duties"<br><strong>Actions:</strong> "Assign to incident 7" / "Resolve incident 5" / "Complete duty 3"<br><strong>Analytics:</strong> "KPIs" / "Officer performance" / "Priority distribution"<br><strong>Alerts:</strong> "Show alerts"<br><br>✨ <strong>Powered by Google Gemini 2.0 Flash</strong> — ask anything in natural language!`;
       default:
         if(window._novaPending) return `Waiting for confirmation. Reply <strong>yes</strong> or <strong>no</strong>.`;
         const freeReply = await novaGemini(userMsg);
@@ -311,7 +301,7 @@ function toggleNova() {
   document.getElementById('novaPanel').classList.toggle('open', novaOpen);
   document.getElementById('novaFab').classList.toggle('active', novaOpen);
   if(novaOpen && novaMessages.length===0) {
-    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}). ✨ <strong>Gemini AI active</strong> — ask me anything in natural language!<br>Type <strong>"help"</strong> to see operational commands.`);
+    addNovaMessage('nova', `<strong>NOVA Online</strong> — ${new Date().toLocaleTimeString([],{hour:'2-digit',minute:'2-digit'})}<br><br>Hello <strong>${novaUser()||'Operator'}</strong> (${novaRole()||'guest'}).<br><br>✨ I'm powered by <strong>Google Gemini 2.0 Flash</strong> — your AI command assistant for the Tumkur Region. Ask me anything in natural language or type <strong>"help"</strong> for operational commands.`);
   }
 }
 

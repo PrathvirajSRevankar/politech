@@ -1695,6 +1695,16 @@
     .nova-header-info h4 { font-size:0.88rem;font-weight:800;color:var(--text); }
     .nova-header-info span { font-size:0.7rem;color:var(--emerald);font-weight:600; }
 
+    .nova-gemini-badge {
+      display: inline-flex; align-items: center; gap: 4px;
+      background: linear-gradient(135deg, rgba(138,43,226,0.2), rgba(99,102,241,0.2));
+      border: 1px solid rgba(138,43,226,0.4);
+      border-radius: 50px; padding: 2px 8px;
+      font-size: 0.65rem; font-weight: 800; letter-spacing: 0.3px;
+      color: #c084fc; margin-top: 3px;
+    }
+    .nova-gemini-badge .gemini-star { font-size: 0.7rem; }
+
     #novaMessages {
       flex: 1; overflow-y: auto; padding: 14px; display: flex;
       flex-direction: column; gap: 10px; min-height: 300px; max-height: 380px;
@@ -1965,9 +1975,12 @@
       <div class="nova-header-icon"><i class="fas fa-robot"></i></div>
       <div class="nova-header-info">
         <h4>NOVA Command Assistant</h4>
-        <span>● Online — Tumkur Region</span>
+        <div style="display:flex;align-items:center;gap:6px;margin-top:2px;">
+          <span>● Online &mdash; Tumkur Region</span>
+          <span class="nova-gemini-badge"><span class="gemini-star">✦</span> Gemini 2.0 Flash</span>
+        </div>
       </div>
-      <button onclick="novaOpenSettings()" title="Gemini AI Settings" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.95rem;padding:4px 6px;border-radius:6px;transition:color 0.2s;" onmouseover="this.style.color='#6366f1'" onmouseout="this.style.color='var(--text-muted)'"><i class="fas fa-gear"></i></button>
+      <button onclick="novaOpenSettings()" title="Gemini AI Info" style="margin-left:auto;background:none;border:none;color:var(--text-muted);cursor:pointer;font-size:0.95rem;padding:4px 6px;border-radius:6px;transition:color 0.2s;" onmouseover="this.style.color='#c084fc'" onmouseout="this.style.color='var(--text-muted)'"><i class="fas fa-circle-info"></i></button>
     </div>
     <div id="novaMessages"></div>
     <div id="novaTyping"><div class="typing-dots"><span></span><span></span><span></span></div> NOVA is thinking…</div>
