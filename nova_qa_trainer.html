@@ -1,0 +1,170 @@
+
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: var(--font-sans); }
+.wrap { padding: 1rem 0; }
+.header { margin-bottom: 1.5rem; }
+.header h2 { font-size: 18px; font-weight: 500; color: var(--color-text-primary); }
+.header p { font-size: 13px; color: var(--color-text-secondary); margin-top: 4px; }
+.stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 10px; margin-bottom: 1.5rem; }
+.stat { background: var(--color-background-secondary); border-radius: var(--border-radius-md); padding: 0.75rem 1rem; }
+.stat-val { font-size: 22px; font-weight: 500; color: var(--color-text-primary); }
+.stat-lbl { font-size: 12px; color: var(--color-text-secondary); margin-top: 2px; }
+.filter-row { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 1.25rem; }
+.chip { font-size: 12px; padding: 4px 12px; border-radius: 999px; border: 0.5px solid var(--color-border-secondary); background: var(--color-background-primary); color: var(--color-text-secondary); cursor: pointer; transition: all 0.15s; }
+.chip.active { background: var(--color-background-info); color: var(--color-text-info); border-color: var(--color-border-info); }
+.qa-list { display: flex; flex-direction: column; gap: 10px; }
+.qa-card { background: var(--color-background-primary); border: 0.5px solid var(--color-border-tertiary); border-radius: var(--border-radius-lg); overflow: hidden; }
+.qa-q { padding: 14px 16px; cursor: pointer; display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.qa-q-text { font-size: 14px; font-weight: 500; color: var(--color-text-primary); line-height: 1.5; }
+.qa-tag { font-size: 11px; padding: 2px 8px; border-radius: 999px; white-space: nowrap; flex-shrink: 0; margin-top: 2px; }
+.tag-general { background: var(--color-background-secondary); color: var(--color-text-secondary); }
+.tag-login { background: #E6F1FB; color: #0C447C; }
+.tag-dashboard { background: #EAF3DE; color: #27500A; }
+.tag-api { background: #FAEEDA; color: #633806; }
+.tag-realtime { background: #EEEDFE; color: #3C3489; }
+.tag-troubleshoot { background: #FAECE7; color: #712B13; }
+.tag-sharing { background: #E1F5EE; color: #085041; }
+.qa-a { padding: 0 16px 14px; font-size: 13px; color: var(--color-text-secondary); line-height: 1.7; border-top: 0.5px solid var(--color-border-tertiary); display: none; padding-top: 12px; }
+.qa-a.open { display: block; }
+.qa-a code { font-family: var(--font-mono); font-size: 12px; background: var(--color-background-secondary); padding: 1px 5px; border-radius: 4px; color: var(--color-text-primary); }
+.chevron { font-size: 16px; color: var(--color-text-tertiary); flex-shrink: 0; transition: transform 0.2s; }
+.chevron.open { transform: rotate(180deg); }
+.copy-all { font-size: 13px; padding: 6px 14px; }
+.empty { text-align: center; padding: 2rem; color: var(--color-text-tertiary); font-size: 14px; }
+</style>
+
+<div class="wrap">
+<h2 class="sr-only">NOVA Q&A training dataset for POLITECH system</h2>
+<div class="header">
+  <h2>NOVA training Q&A — POLITECH</h2>
+  <p>Click a question to reveal the answer. Filter by category below.</p>
+</div>
+
+<div class="stats">
+  <div class="stat"><div class="stat-val" id="total-count">36</div><div class="stat-lbl">Total Q&A pairs</div></div>
+  <div class="stat"><div class="stat-val">7</div><div class="stat-lbl">Categories</div></div>
+  <div class="stat"><div class="stat-val" id="shown-count">36</div><div class="stat-lbl">Showing</div></div>
+</div>
+
+<div class="filter-row" id="filters"></div>
+<div class="qa-list" id="qa-list"></div>
+</div>
+
+<script>
+const QA = [
+  { cat: "general", q: "What is POLITECH?", a: "POLITECH is a web-based Police Command Operations Center dashboard built for Tumakuru Police. It lets officers and dispatchers monitor personnel, track incidents, manage duties, and view analytics — all in real time." },
+  { cat: "general", q: "What does NOVA do?", a: "NOVA is POLITECH's built-in AI assistant. It helps users navigate the system, explains features, answers questions about incidents and duties, and guides you through operations." },
+  { cat: "general", q: "What are the main pages in POLITECH?", a: "POLITECH has three main pages: the Login page for authentication, the Dashboard (police.html) for live operations, and the Analytics page for charts and performance reports." },
+  { cat: "general", q: "What files make up POLITECH?", a: "The key files are: login.html (login page), police.html (main dashboard), app.js (dashboard logic), analytics.html (charts), analytics.js (analytics logic), and the backend/ folder containing the FastAPI server and politech.db (SQLite database)." },
+  { cat: "general", q: "What technology powers the POLITECH backend?", a: "The backend runs on Python with FastAPI as the web framework and SQLite as the database. It communicates with the frontend via REST API and WebSocket." },
+
+  { cat: "login", q: "How do I log in to POLITECH?", a: "Open login.html in your browser, enter your username and password, then click login. You can also use the Quick Login chips to fill credentials automatically. A JWT token is saved and you'll be redirected to the dashboard." },
+  { cat: "login", q: "What are the login credentials?", a: "There are four accounts: admin / admin123 (full access), dispatcher / dispatch123 (manage incidents & duties), officer / officer123 (view only), analyst / analyst123 (view + analytics)." },
+  { cat: "login", q: "What is the admin account username and password?", a: "Username: admin, Password: admin123. This account has full access to all features." },
+  { cat: "login", q: "What can a dispatcher do?", a: "A dispatcher can manage incidents and duties — assigning officers, creating duties, and updating statuses. They cannot access system-level admin features." },
+  { cat: "login", q: "What can an analyst do?", a: "An analyst has view access to the dashboard plus full access to the Analytics page, including KPI cards, charts, and the officer performance table." },
+  { cat: "login", q: "What happens after a successful login?", a: "POLITECH saves a JWT (JSON Web Token) to your browser and automatically redirects you to the main dashboard (police.html)." },
+
+  { cat: "dashboard", q: "What can I see on the dashboard?", a: "The dashboard shows a Live Map of officer and incident locations, an Incident Feed with priorities, a Force Grid of officer cards, a Duty Roster, and an Alert Drawer for notifications. You can also toggle between Night Watch (dark) and Day Mode (light)." },
+  { cat: "dashboard", q: "How do I assign an officer to an incident?", a: "Drag an Available officer card from the Force Grid and drop it onto the incident in the Incident Feed. The system will automatically update the officer's status to Assigned and create an Emergency duty." },
+  { cat: "dashboard", q: "What is the Force Grid?", a: "The Force Grid is a grid of officer cards showing each officer's name, rank, badge number, and current status. Available officers can be dragged onto incidents to assign them." },
+  { cat: "dashboard", q: "What incident priorities exist?", a: "Incidents are classified into four priority levels: Critical, High, Medium, and Low." },
+  { cat: "dashboard", q: "How do I complete a duty?", a: "In the Duty Roster section on the dashboard, find the duty you want to close and click the complete button on that duty card." },
+  { cat: "dashboard", q: "What is the Alert Drawer?", a: "The Alert Drawer is a notification panel accessed by clicking the bell icon. It shows system alerts and important updates about officers, incidents, and duties." },
+  { cat: "dashboard", q: "Can I switch between dark and light mode?", a: "Yes. Use the Theme Toggle button on the dashboard. Night Watch is the dark theme and Day Mode is the light theme." },
+  { cat: "dashboard", q: "What does the Live Map show?", a: "The Live Map (powered by Google Maps, centered on Tumakuru) shows the real-time locations of officers and active incidents on the map." },
+  { cat: "dashboard", q: "What is the Assign Officer button?", a: "The Assign Officer button lets you manually assign a duty to an officer using a form, as an alternative to the drag-and-drop method." },
+
+  { cat: "api", q: "What is the base URL for the POLITECH API?", a: "The base URL is http://127.0.0.1:8000. Interactive API documentation is available at http://127.0.0.1:8000/docs." },
+  { cat: "api", q: "How do I log in via the API?", a: "Send a POST request to /api/v1/auth/login with your credentials. The response returns a JWT token to use in subsequent requests." },
+  { cat: "api", q: "Which endpoint lists all officers?", a: "GET /api/v1/officers returns the full list of officers." },
+  { cat: "api", q: "How do I assign an officer to an incident via API?", a: "Send a PATCH request to /api/v1/incidents/{id}/assign, replacing {id} with the incident's ID." },
+  { cat: "api", q: "Which endpoint marks a duty as completed?", a: "PATCH /api/v1/duties/{id}/complete — replace {id} with the duty's ID." },
+  { cat: "api", q: "What analytics data can I get from the API?", a: "GET /api/v1/analytics/kpi returns a summary including total incidents, average response time, critical incidents today, and completion rate." },
+  { cat: "api", q: "How do I start the backend server?", a: "Navigate to the backend/ folder and run: python -m uvicorn main:app --reload --port 8000. Alternatively, double-click backend/start.bat on Windows." },
+
+  { cat: "realtime", q: "How does real-time updating work in POLITECH?", a: "POLITECH uses a WebSocket connection at ws://127.0.0.1:8000/ws. When any action happens (officer status change, new incident, duty update), all connected browsers receive an event and update instantly." },
+  { cat: "realtime", q: "What WebSocket events does POLITECH send?", a: "POLITECH broadcasts: officer:status_changed (when an officer's status updates), duty:created / completed / deleted, incident:new / assigned / resolved, and a heartbeat event every 30 seconds to keep the connection alive." },
+  { cat: "realtime", q: "What happens when I assign an officer via drag and drop?", a: "The backend sets the officer's status to Assigned, auto-creates an Emergency duty, and broadcasts events to all connected browsers so every user sees the update immediately." },
+  { cat: "realtime", q: "What is the heartbeat event?", a: "The heartbeat is a keep-alive signal sent every 30 seconds over the WebSocket to ensure the connection between the browser and server stays active." },
+
+  { cat: "sharing", q: "How can I share POLITECH for a demo?", a: "For demos without needing a backend, use Demo Mode — it runs entirely in the browser. For temporary live sharing, run ngrok http 8000 to create a public tunnel. For permanent access, deploy the backend to a cloud platform like Render or Railway." },
+  { cat: "sharing", q: "What is ngrok and how do I use it with POLITECH?", a: "ngrok is a tool that creates a temporary public URL for your local server. Run ngrok http 8000 in a terminal and share the generated URL so others can access your POLITECH instance over the internet." },
+
+  { cat: "troubleshoot", q: "The dashboard is not loading data. What should I check?", a: "Make sure the backend server is running at http://127.0.0.1:8000. Check that you ran pip install -r requirements.txt in the backend/ folder. Also verify you're logged in with a valid JWT token." },
+  { cat: "troubleshoot", q: "Real-time updates are not working. What could be wrong?", a: "Check that the WebSocket connection to ws://127.0.0.1:8000/ws is not blocked by a firewall or proxy. Ensure the backend server is running and that your browser supports WebSockets." },
+  { cat: "troubleshoot", q: "I forgot my login credentials. What are they?", a: "Default credentials are: admin/admin123, dispatcher/dispatch123, officer/officer123, analyst/analyst123. These are the default accounts — if they've been changed, contact your system administrator." },
+  { cat: "troubleshoot", q: "Analytics page shows no data. Why?", a: "The Analytics page loads data from the backend's /api/v1/analytics/kpi endpoint. Ensure the backend is running, you're logged in as analyst or admin, and the database (politech.db) has data." },
+];
+
+const CATS = [
+  { id: "all", label: "All" },
+  { id: "general", label: "General" },
+  { id: "login", label: "Login & Roles" },
+  { id: "dashboard", label: "Dashboard" },
+  { id: "api", label: "API & Backend" },
+  { id: "realtime", label: "Real-Time" },
+  { id: "sharing", label: "Sharing" },
+  { id: "troubleshoot", label: "Troubleshoot" },
+];
+
+let active = "all";
+
+function tagClass(cat) {
+  const map = { general:"tag-general", login:"tag-login", dashboard:"tag-dashboard", api:"tag-api", realtime:"tag-realtime", troubleshoot:"tag-troubleshoot", sharing:"tag-sharing" };
+  return map[cat] || "tag-general";
+}
+function tagLabel(cat) {
+  const map = { general:"General", login:"Login", dashboard:"Dashboard", api:"API", realtime:"Real-time", troubleshoot:"Troubleshoot", sharing:"Sharing" };
+  return map[cat] || cat;
+}
+
+function render() {
+  const list = document.getElementById("qa-list");
+  const shown = document.getElementById("shown-count");
+  const filtered = active === "all" ? QA : QA.filter(q => q.cat === active);
+  shown.textContent = filtered.length;
+  list.innerHTML = "";
+  if (!filtered.length) { list.innerHTML = '<div class="empty">No Q&A in this category.</div>'; return; }
+  filtered.forEach((item, i) => {
+    const card = document.createElement("div");
+    card.className = "qa-card";
+    card.innerHTML = `
+      <div class="qa-q" onclick="toggle(this)">
+        <span class="qa-q-text">${item.q}</span>
+        <div style="display:flex;align-items:center;gap:8px;flex-shrink:0;">
+          <span class="qa-tag ${tagClass(item.cat)}">${tagLabel(item.cat)}</span>
+          <i class="ti ti-chevron-down chevron" aria-hidden="true"></i>
+        </div>
+      </div>
+      <div class="qa-a">${item.a.replace(/`([^`]+)`/g, '<code>$1</code>')}</div>
+    `;
+    list.appendChild(card);
+  });
+}
+
+function toggle(el) {
+  const ans = el.nextElementSibling;
+  const chevron = el.querySelector(".chevron");
+  const isOpen = ans.classList.contains("open");
+  document.querySelectorAll(".qa-a.open").forEach(a => { a.classList.remove("open"); a.previousElementSibling.querySelector(".chevron").classList.remove("open"); });
+  if (!isOpen) { ans.classList.add("open"); chevron.classList.add("open"); }
+}
+
+const filters = document.getElementById("filters");
+CATS.forEach(c => {
+  const chip = document.createElement("button");
+  chip.className = "chip" + (c.id === "all" ? " active" : "");
+  chip.textContent = c.label;
+  chip.onclick = () => {
+    active = c.id;
+    document.querySelectorAll(".chip").forEach(ch => ch.classList.remove("active"));
+    chip.classList.add("active");
+    render();
+  };
+  filters.appendChild(chip);
+});
+
+render();
+</script>
